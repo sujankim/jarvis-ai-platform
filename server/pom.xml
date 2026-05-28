@@ -10,7 +10,7 @@
     </parent>
     <groupId>ai.jarvis</groupId>
     <artifactId>jarvis-server</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
     <name>Jarvis AI Platform — Server</name>
     <description>Modular, local-first, open-source AI assistant
         platform. Built with Spring Boot 4 and Spring AI 2.</description>
@@ -23,13 +23,26 @@
         </license>
     </licenses>
     <developers>
-        <developer/>
+        <developer>
+            <id>sujankim</id>
+            <name>Sujan</name>
+            <url>https://github.com/sujankim</url>
+            <roles>
+                <role>lead</role>
+                <role>developer</role>
+            </roles>
+        </developer>
     </developers>
+
     <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
+        <connection>
+            scm:git:git://github.com/sujankim/jarvis-ai-platform.git
+        </connection>
+        <developerConnection>
+            scm:git:ssh://git@github.com/sujankim/jarvis-ai-platform.git
+        </developerConnection>
+        <tag>HEAD</tag>
+        <url>https://github.com/sujankim/jarvis-ai-platform</url>
     </scm>
     <properties>
         <java.version>21</java.version>
@@ -38,6 +51,7 @@
         <!-- UPDATE TO: 2.0.0    when GA releases June 4 -->
         <mapstruct.version>1.6.3</mapstruct.version>
         <spring-shell.version>4.0.2</spring-shell.version>
+        <lombok.version>1.18.36</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
         <bouncycastle.version>1.84</bouncycastle.version>
         <jjwt.version>0.12.7</jjwt.version>
@@ -321,6 +335,14 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
             </plugin>
 
             <!-- Compiler -->
@@ -337,18 +359,20 @@
                     </compilerArgs>
 
                     <annotationProcessorPaths>
-
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
                         <path>
                             <groupId>org.mapstruct</groupId>
                             <artifactId>mapstruct-processor</artifactId>
                             <version>${mapstruct.version}</version>
                         </path>
-
                         <path>
                             <groupId>org.springframework.boot</groupId>
                             <artifactId>spring-boot-configuration-processor</artifactId>
                         </path>
-
                     </annotationProcessorPaths>
 
                 </configuration>
