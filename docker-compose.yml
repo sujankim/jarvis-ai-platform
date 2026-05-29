@@ -9,8 +9,6 @@
 #   Reset:   docker-compose down -v (DELETES ALL DATA)
 # ═══════════════════════════════════════════════════
 
-version: '3.9'
-
 services:
 
   postgres:
@@ -22,7 +20,7 @@ services:
       POSTGRES_USER: jarvis
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jarvis}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - jarvis-postgres-data:/var/lib/postgresql/data
     healthcheck:

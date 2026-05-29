@@ -7,8 +7,6 @@
 #   docker-compose -f docker-compose.dev.yml up -d
 # ═══════════════════════════════════════════════════
 
-version: '3.9'
-
 services:
 
   postgres:
@@ -19,7 +17,7 @@ services:
       POSTGRES_USER: jarvis
       POSTGRES_PASSWORD: jarvis
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - jarvis-postgres-dev-data:/var/lib/postgresql/data
 

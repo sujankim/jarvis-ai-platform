@@ -1,19 +1,20 @@
 # ═══════════════════════════════════════════════════
 # Jarvis AI Platform — Application Configuration
 # Version: 0.1.0
-#
-# SENSITIVE VALUES come from environment variables.
-# See .env.example for the full list.
-# NEVER commit real values to Git.
 # ═══════════════════════════════════════════════════
 
 spring:
   application:
     name: jarvis-ai-platform
 
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+
   # ── Database (R2DBC) ──────────────────────────────
   r2dbc:
-    url: ${DATABASE_URL:r2dbc:postgresql://localhost:5432/jarvis}
+    url: ${DATABASE_URL:r2dbc:postgresql://localhost:5433/jarvis}
     username: ${DATABASE_USERNAME:jarvis}
     password: ${DATABASE_PASSWORD:jarvis}
     pool:
@@ -25,7 +26,7 @@ spring:
   # ── Database Migrations (Flyway) ──────────────────
   flyway:
     enabled: true
-    url: ${FLYWAY_URL:jdbc:postgresql://localhost:5432/jarvis}
+    url: ${FLYWAY_URL:jdbc:postgresql://localhost:5433/jarvis}
     user: ${DATABASE_USERNAME:jarvis}
     password: ${DATABASE_PASSWORD:jarvis}
     locations: classpath:db/migration
@@ -33,31 +34,28 @@ spring:
     validate-on-migrate: true
     out-of-order: false
 
-  # ── Spring AI — Ollama ────────────────────────────
+  # ── Spring AI ─────────────────────────────────────
   ai:
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
         model: ${OLLAMA_MODEL:llama3.1:8b}
-        options:
-          temperature: 0.7
-          num-predict: 2048
+        temperature: 0.7
+        num-predict: 2048
       embedding:
         model: nomic-embed-text
 
-    # ── Spring AI — Gemini ──────────────────────────
     google:
       api-key: ${GEMINI_API_KEY:}
       chat:
-        model: ${GEMINI_MODEL:gemini-3.5-flash}
+        model: ${GEMINI_MODEL:gemini-2.0-flash}
         options:
           temperature: 0.7
           max-output-tokens: 2048
 
-    # ── Spring AI — PgVector ─────────────────────────
     vectorstore:
       pgvector:
-        enabled: false           # Phase 2 — disabled until needed
+        enabled: false
         index-type: hnsw
         distance-type: cosine_distance
         dimensions: 768
@@ -74,9 +72,8 @@ spring:
 # JARVIS CUSTOM CONFIGURATION
 # ═══════════════════════════════════════════════════
 jarvis:
-  version: "@project.version@"    # Injected by Maven
+  version: "@project.version@"
 
-  # ── Security ──────────────────────────────────────
   security:
     jwt:
       secret: ${JARVIS_JWT_SECRET}
@@ -91,13 +88,12 @@ jarvis:
       admin-requests-per-minute: 10
 
     argon2:
-      memory: 65536     # 64MB memory
+      memory: 65536
       iterations: 3
       parallelism: 1
       hash-length: 32
       salt-length: 16
 
-  # ── AI Orchestration ──────────────────────────────
   ai:
     primary-provider: ollama
     fallback-provider: gemini
@@ -118,7 +114,6 @@ jarvis:
       max-input-length: 10000
       injection-detection-enabled: true
 
-  # ── CLI ───────────────────────────────────────────
   cli:
     config-dir: ${user.home}/.jarvis
     log-dir: ${user.home}/.jarvis/logs
@@ -126,7 +121,6 @@ jarvis:
     session-file: ${user.home}/.jarvis/session.json
     preferences-file: ${user.home}/.jarvis/preferences.json
 
-  # ── Observability ─────────────────────────────────
   observability:
     log-ai-requests: true
     log-token-usage: true
@@ -134,7 +128,7 @@ jarvis:
     performance-summary-interval: 5m
 
 # ═══════════════════════════════════════════════════
-# SPRING BOOT ACTUATOR
+# ACTUATOR
 # ═══════════════════════════════════════════════════
 management:
   endpoints:
@@ -171,7 +165,7 @@ logging:
       total-size-cap: 500MB
 
 # ═══════════════════════════════════════════════════
-# APP INFO (exposed via /actuator/info)
+# APP INFO
 # ═══════════════════════════════════════════════════
 info:
   app:
@@ -180,5 +174,5 @@ info:
     description: "Local-first, open-source AI assistant"
     java-version: "@java.version@"
   links:
-    github: "https://github.com/YOUR_USERNAME/jarvis-ai-platform"
-    docs: "https://github.com/YOUR_USERNAME/jarvis-ai-platform/docs"
+    github: "https://github.com/sujankim/jarvis-ai-platform"
+    docs: "https://github.com/sujankim/jarvis-ai-platform/docs"
