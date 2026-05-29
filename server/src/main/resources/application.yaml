@@ -147,14 +147,29 @@ management:
       application: jarvis-ai-platform
 
 # ═══════════════════════════════════════════════════
+# SWAGGER API
+# ═══════════════════════════════════════════════════
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  show-actuator: false
+
+# ═══════════════════════════════════════════════════
 # LOGGING
 # ═══════════════════════════════════════════════════
 logging:
   level:
-    ai.jarvis: INFO
+    ai.jarvis: DEBUG
     org.springframework: WARN
     io.r2dbc: WARN
-    org.flywaydb: INFO
+    org.flywaydb: DEBUG
     reactor.netty: WARN
   file:
     name: ${user.home}/.jarvis/logs/jarvis.log
