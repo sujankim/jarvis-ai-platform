@@ -1,8 +1,12 @@
 package ai.jarvis.config;
 
+import ai.jarvis.security.jwt.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -10,15 +14,36 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 
 @Configuration
 @EnableWebFluxSecurity
+@EnableReactiveMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthFilter;
+
+    // ─── Public endpoints — no JWT needed ─────────────────────────
+    private static final String[] PUBLIC_ENDPOINTS = {
+            "/api/v1/auth/**",
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs/**",
+            "/webjars/**",
+            "/actuator/health",
+            "/api/test/**"
+    };
 
     @Bean
     public SecurityWebFilterChain securityFilterChain(
             ServerHttpSecurity http) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .addFilterBefore(
+                        jwtAuthFilter,
+                        SecurityWebFiltersOrder.AUTHENTICATION
+                )
                 .authorizeExchange(exchanges -> exchanges
-                        .anyExchange().permitAll()
+                        // Public endpoints — no auth needed
+                        .pathMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        .anyExchange().authenticated()
                 )
                 .build();
     }

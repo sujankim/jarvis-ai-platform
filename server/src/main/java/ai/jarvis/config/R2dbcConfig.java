@@ -1,5 +1,6 @@
 package ai.jarvis.config;
 
+import ai.jarvis.chat.message.MessageRole;
 import ai.jarvis.user.UserRole;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,10 +28,14 @@ public class R2dbcConfig {
                 PostgresDialect.INSTANCE,
                 Arrays.asList(
                         new UserRoleReadConverter(),
-                        new UserRoleWriteConverter()
+                        new UserRoleWriteConverter(),
+                        new MessageRoleReadConverter(),
+                        new MessageRoleWriteConverter()
                 )
         );
     }
+
+    // ── UserRole converters ───────────────────────
 
     // Read: String from DB → UserRole enum
     @ReadingConverter
@@ -48,6 +53,26 @@ public class R2dbcConfig {
             implements Converter<UserRole, String> {
         @Override
         public String convert(UserRole source) {
+            return source.name();
+        }
+    }
+
+    // ── MessageRole converters ────────────────────
+
+    @ReadingConverter
+    public static class MessageRoleReadConverter
+    implements Converter<String, MessageRole> {
+        @Override
+        public MessageRole convert(String source) {
+            return MessageRole.valueOf(source.toUpperCase());
+        }
+    }
+
+    @WritingConverter
+    public static class MessageRoleWriteConverter
+    implements Converter<MessageRole, String> {
+        @Override
+        public String convert(MessageRole source) {
             return source.name();
         }
     }
