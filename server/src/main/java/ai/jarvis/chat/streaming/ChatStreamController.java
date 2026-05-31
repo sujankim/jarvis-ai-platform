@@ -80,19 +80,20 @@ public class ChatStreamController {
                                 return orchestrator
                                         .chat(orchRequest)
                                         .map(token ->
-                                                ServerSentEvent
-                                                        .<String>builder()
+                                                ServerSentEvent.<String>builder()
                                                         .event("token")
-                                                        // JSON encode to
-                                                        // preserve spaces!
-                                                        .data(
-                                                                jsonToken(token)
-                                                        )
+                                                        .data(jsonToken(token))
+                                                        .build()
+                                        )
+                                        //  PREPEND session event BEFORE tokens
+                                        .startWith(
+                                                ServerSentEvent.<String>builder()
+                                                        .event("session")
+                                                        .data(session.id().toString())
                                                         .build()
                                         )
                                         .concatWith(Flux.just(
-                                                ServerSentEvent
-                                                        .<String>builder()
+                                                ServerSentEvent.<String>builder()
                                                         .event("done")
                                                         .data("[DONE]")
                                                         .build()

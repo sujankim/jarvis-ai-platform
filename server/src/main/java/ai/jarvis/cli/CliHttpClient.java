@@ -105,6 +105,7 @@ public class CliHttpClient {
     public void streamChat(
             String token,
             Object body,
+            java.util.function.Consumer<String> onSession,
             java.util.function.Consumer<String> onToken,
             Runnable onDone,
             java.util.function.Consumer<String> onError) {
@@ -133,17 +134,22 @@ public class CliHttpClient {
                                     org.springframework.http.codec
                                             .ServerSentEvent<String>>() {})
                     .doOnNext(event -> {
-                        if ("token".equals(event.event())
+                        String eventType = event.event();
+
+                        if ("session".equals(eventType)
                                 && event.data() != null) {
-                            // ── Parse JSON token to get
-                            //    the real text with spaces
+                            // Signal session ID back via callback
+                            onSession.accept(event.data().trim());
+
+                        } else if ("token".equals(eventType)
+                                && event.data() != null) {
                             String tokenText =
                                     parseJsonToken(event.data());
                             if (tokenText != null) {
                                 onToken.accept(tokenText);
                             }
-                        } else if ("done"
-                                .equals(event.event())) {
+
+                        } else if ("done".equals(eventType)) {
                             onDone.run();
                         }
                     })

@@ -123,27 +123,39 @@ public class ChatCommands {
         System.out.flush();
 
         ChatRequest request = new ChatRequest(
-                state.getActiveSessionId(),
+                state.getActiveSessionId(), // uses stored ID
                 message,
                 null);
 
         http.streamChat(
                 state.getAccessToken(),
                 request,
-                // onToken: print each token immediately
+                // onSession: store for next message
+                sessionId -> {
+                    if (state.getActiveSessionId() == null) {
+                        try {
+                            state.setActiveSessionId(
+                                    UUID.fromString(sessionId));
+                            state.setActiveSessionTitle(
+                                    message.length() > 30
+                                            ? message.substring(0,27) + "..."
+                                            : message);
+                        } catch (Exception ignored) {}
+                    }
+                },
+                // onToken
                 token -> {
                     System.out.print(token);
                     System.out.flush();
                 },
-                // onDone: newline when complete
+                // onDone
                 () -> {
                     System.out.println();
                     System.out.flush();
                 },
-                // onError: show friendly message
+                // onError
                 error -> {
-                    System.out.println(
-                            "\n❌ " + formatError(error));
+                    System.out.println("\n❌ " + formatError(error));
                     System.out.flush();
                 }
         );
