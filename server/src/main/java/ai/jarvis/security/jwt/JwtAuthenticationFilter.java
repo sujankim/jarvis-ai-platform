@@ -20,9 +20,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter implements WebFilter {
 
-    public final JwtService jwtService;
+    private final JwtService jwtService;
 
-    public static final String BEARER_PREFIX = "Bearer ";
+    private static final String BEARER_PREFIX = "Bearer ";
 
     @Override
     public Mono<Void> filter(
@@ -33,7 +33,6 @@ public class JwtAuthenticationFilter implements WebFilter {
                 .getHeaders()
                 .getFirst(HttpHeaders.AUTHORIZATION);
 
-        // No Authorization header = continue as anonymous
         if (authHeader == null
                 || !authHeader.startsWith(BEARER_PREFIX)) {
             return chain.filter(exchange);
@@ -42,7 +41,6 @@ public class JwtAuthenticationFilter implements WebFilter {
         String token = authHeader
                 .substring(BEARER_PREFIX.length());
 
-        // Validate the token
         if (!jwtService.validateToken(token)) {
             log.debug("Invalid JWT token rejected");
             exchange.getResponse()
@@ -50,37 +48,41 @@ public class JwtAuthenticationFilter implements WebFilter {
             return exchange.getResponse().setComplete();
         }
 
-        // Check it's an access token (not refresh token)
-        String tokenType = jwtService.extractTokenType(token);
+        String tokenType =
+                jwtService.extractTokenType(token);
         if (!"access".equals(tokenType)) {
-            log.debug("Non-access token rejected");
             exchange.getResponse()
                     .setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
 
-        // Extract user info from token
+        // Extract all user info from token
         String userId = jwtService.extractUserId(token);
-        String username = jwtService.extractUsername(token);
+        String username =
+                jwtService.extractUsername(token);
         String role = jwtService.extractRole(token);
 
-        log.debug("JWT authenticated: username={} role={}",
+        log.debug(
+                "JWT authenticated: username={} role={}",
                 username, role);
 
-        // Build Spring Security authentication object
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
-                        userId, null,
+                        userId,
+                        null,
                         List.of(new SimpleGrantedAuthority(
-                                "ROLE_" + role
-                        )));
+                                "ROLE_" + role))
+                );
 
-        // Store in Reactor Context (NOT ThreadLocal!)
-        // This travels through the reactive pipeline
+        // Store username in details
+        // so controllers can access it without DB query
+        authentication.setDetails(username);
+
         return chain.filter(exchange)
                 .contextWrite(
                         ReactiveSecurityContextHolder
-                                .withAuthentication(authentication)
+                                .withAuthentication(
+                                        authentication)
                 );
     }
 }

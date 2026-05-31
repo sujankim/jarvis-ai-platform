@@ -106,17 +106,6 @@ public class AuthService {
                         )
                 ))
                 .flatMap(user -> {
-
-                    log.debug(
-                            "Found user: username={} active={} hasHash={}",
-                            user.username(),
-                            user.active(),
-                            user.passwordHash() != null
-                                    ? "YES (length="
-                                      + user.passwordHash().length() + ")"
-                                    : "NULL ← PROBLEM"
-                    );
-
                     if (!user.active()) {
                         return Mono.error(
                                 new ResponseStatusException(

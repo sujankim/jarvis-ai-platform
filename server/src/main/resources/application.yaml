@@ -61,6 +61,8 @@ spring:
         dimensions: 768
 
   # ── Spring Shell ──────────────────────────────────
+  main:
+    web-application-type: reactive
   shell:
     interactive:
       enabled: true
@@ -139,6 +141,8 @@ management:
     health:
       show-details: always
       show-components: always
+      probes:
+        enabled: false
   info:
     env:
       enabled: true
@@ -166,10 +170,10 @@ springdoc:
 # ═══════════════════════════════════════════════════
 logging:
   level:
-    ai.jarvis: DEBUG
+    ai.jarvis: INFO
     org.springframework: WARN
     io.r2dbc: WARN
-    org.flywaydb: DEBUG
+    org.flywaydb: WARN
     reactor.netty: WARN
   file:
     name: ${user.home}/.jarvis/logs/jarvis.log
