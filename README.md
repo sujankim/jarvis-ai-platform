@@ -25,6 +25,12 @@ Built with **Java 21**, **Spring Boot 4**, and **Spring AI 2.0**
 
 ---
 
+<p align="center">
+  <img src="docs/demo.gif" alt="Jarvis Demo">
+</p>
+
+---
+
 ## What Is Jarvis?
 
 Jarvis is not just a chatbot. It is a **modular AI orchestration platform**

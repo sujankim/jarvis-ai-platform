@@ -113,50 +113,60 @@ public class SystemCommands {
 
         // Check Jarvis server
         if (http.isServerReachable()) {
-            sb.append("✅ Jarvis server:  Running\n");
+            sb.append("[OK] Jarvis server:  Running\n");
         } else {
+            sb.append("[!!] Jarvis server:  Not running\n");
             sb.append(
-                    "❌ Jarvis server:  Not running\n");
-            sb.append(
-                    "   Fix: ./mvnw spring-boot:run\n");
+                    "     Fix: ./mvnw spring-boot:run\n");
         }
 
-        // Check Ollama directly
+        // Check Ollama
         try {
             java.net.http.HttpClient client =
-                    java.net.http.HttpClient.newHttpClient();
+                    java.net.http.HttpClient
+                            .newHttpClient();
             java.net.http.HttpRequest req =
-                    java.net.http.HttpRequest.newBuilder()
+                    java.net.http.HttpRequest
+                            .newBuilder()
                             .uri(java.net.URI.create(
                                     "http://localhost:11434"
                                             + "/api/tags"))
                             .GET()
                             .build();
-            var response = client.send(req,
+            var resp = client.send(req,
                     java.net.http.HttpResponse.BodyHandlers
                             .ofString());
-            if (response.statusCode() == 200) {
-                sb.append("✅ Ollama:         Running\n");
+            if (resp.statusCode() == 200) {
+                sb.append("[OK] Ollama:         Running\n");
             } else {
                 sb.append(
-                        "⚠️  Ollama:         Responded with "
-                                + response.statusCode() + "\n");
+                        "[!!] Ollama:         Unexpected "
+                                + resp.statusCode() + "\n");
             }
         } catch (Exception e) {
-            sb.append(
-                    "❌ Ollama:         Not running\n");
-            sb.append("   Fix: ollama serve\n");
+            sb.append("[!!] Ollama:         Not running\n");
+            sb.append("     Fix: ollama serve\n");
         }
 
         // Check login status
         if (state.isLoggedIn()) {
-            sb.append("✅ Auth:           Logged in as "
+            sb.append("[OK] Auth:           Logged in as "
                     + state.getUsername() + "\n");
         } else {
-            sb.append(
-                    "⚠️  Auth:          Not logged in\n");
-            sb.append("   Fix: Type 'login'\n");
+            sb.append("[--] Auth:           Not logged in\n");
+            sb.append("     Fix: Type 'login'\n");
         }
+
+        sb.append("\n");
+        sb.append("USAGE TIPS:\n");
+        sb.append(
+                "  jarvis:> login       - authenticate\n");
+        sb.append(
+                "  jarvis:> chat        - start chatting\n");
+        sb.append(
+                "  jarvis:> session     - list sessions\n");
+        sb.append(
+                "  NOTE: type messages INSIDE 'chat' command\n");
 
         return sb.toString();
     }
