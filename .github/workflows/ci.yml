@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: jarvis
+          POSTGRES_PASSWORD: jarvis
+          POSTGRES_DB: jarvis
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Build and test
+        working-directory: server
+        run: ./mvnw clean verify
+        env:
+          DATABASE_URL: r2dbc:postgresql://localhost:5432/jarvis
+          FLYWAY_URL: jdbc:postgresql://localhost:5432/jarvis
+          DATABASE_USERNAME: jarvis
+          DATABASE_PASSWORD: jarvis
+          JARVIS_JWT_SECRET: test-secret-key-minimum-32-chars-long-enough
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: server/target/surefire-reports/

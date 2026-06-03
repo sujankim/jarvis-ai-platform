@@ -1,0 +1,90 @@
+name: Welcome New Contributors
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Welcome first-time contributors
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sender = context.payload.sender.login;
+            const isBot = context.payload.sender.type === 'Bot';
+
+            // Skip bots
+            if (isBot) return;
+
+            const isIssue =
+              context.eventName === 'issues';
+            const number = context.payload[
+              isIssue ? 'issue' : 'pull_request'
+            ].number;
+
+            // Check all past issues + PRs
+            const { data: allIssues } =
+              await github.rest.issues.listForRepo({
+                owner, repo,
+                creator: sender,
+                state: 'all',
+                per_page: 5
+              });
+
+            // Only welcome on their FIRST contribution
+            if (allIssues.length !== 1) return;
+
+            const message = isIssue
+              ? [
+                  `👋 Welcome @${sender}!`,
+                  ``,
+                  `Thanks for opening your first issue ` +
+                  `on **Jarvis AI Platform**!`,
+                  ``,
+                  `To help us investigate faster:`,
+                  `- Run \`jarvis:> doctor\` ` +
+                  `and include the output`,
+                  `- Include your OS and Java version`,
+                  `- Describe steps to reproduce`,
+                  ``,
+                  `📚 See [CONTRIBUTING.md]` +
+                  `(../blob/main/CONTRIBUTING.md) ` +
+                  `for more info.`,
+                  `💬 Questions? Start a ` +
+                  `[GitHub Discussion](../discussions).`,
+                  ``,
+                  `We'll get back to you soon! 🚀`
+                ].join('\n')
+              : [
+                  `🎉 Welcome @${sender}!`,
+                  ``,
+                  `Thanks for your first contribution ` +
+                  `to **Jarvis AI Platform**!`,
+                  ``,
+                  `Before we review, please make sure:`,
+                  `- [ ] Tests pass: \`./mvnw test\``,
+                  `- [ ] Conventional commit messages used`,
+                  `- [ ] One feature or fix per PR`,
+                  `- [ ] Documentation updated if needed`,
+                  ``,
+                  `📚 See [CONTRIBUTING.md]` +
+                  `(../blob/main/CONTRIBUTING.md) ` +
+                  `for our standards.`,
+                  ``,
+                  `We'll review your PR soon. ` +
+                  `Thanks for helping build Jarvis! 🚀`
+                ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: number,
+              body: message
+            });
