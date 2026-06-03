@@ -171,6 +171,19 @@ public class SystemCommands {
         return sb.toString();
     }
 
+    @Command(name="about", description="Show info")
+    public String about() {
+    return "\nJarvis AI Platform v0.1.0\n"
+            + "─────────────────────────\n"
+            + "Local-first AI assistant platform.\n\n"
+            + "Built with: Java 21 | Spring Boot 4.0.6\n"
+            + "            Spring AI 2.0 | Spring Shell 4.0\n\n"
+            + "GitHub:  github.com/sujankim/jarvis-ai-platform\n"
+            + "License: Apache-2.0\n\n"
+            + "Your AI. Your Data. Your Machine.\n";
+}
+
+
     private String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0))
