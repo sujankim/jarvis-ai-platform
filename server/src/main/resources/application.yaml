@@ -181,7 +181,7 @@ springdoc:
 # ═══════════════════════════════════════════════════
 logging:
   level:
-    ai.jarvis: DEBUG
+    ai.jarvis: INFO
     org.springframework: WARN
     io.r2dbc: WARN
     org.flywaydb: WARN
