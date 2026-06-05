@@ -40,6 +40,12 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       timeout: 2000ms
+      # Connection pool for reactive Redis
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
 
   # ── Spring AI ─────────────────────────────────────
   ai:
@@ -181,11 +187,12 @@ springdoc:
 # ═══════════════════════════════════════════════════
 logging:
   level:
-    ai.jarvis: INFO
+    ai.jarvis: WARN
     org.springframework: WARN
     io.r2dbc: WARN
     org.flywaydb: WARN
     reactor.netty: WARN
+    org.springframework.r2dbc: WARN
   file:
     name: ${user.home}/.jarvis/logs/jarvis.log
   logback:
