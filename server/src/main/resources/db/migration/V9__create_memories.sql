@@ -130,7 +130,7 @@ COMMENT ON COLUMN memories.type IS
 COMMENT ON COLUMN memories.importance IS
     '0.0 = trivial, 1.0 = critical.
      Higher importance = injected into prompts first.
-     Updated automatically based on access_count.';
+     Managed by application logic.';
 
 COMMENT ON COLUMN memories.access_count IS
     'Incremented each time memory is used in a prompt.
