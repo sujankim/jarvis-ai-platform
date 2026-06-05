@@ -1,0 +1,82 @@
+  <mxfile host="app.diagrams.net">
+    <diagram name="Page-1" id="wY7HkS03owiggVAKXcqs">
+      <mxGraphModel dx="1030" dy="527" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+        <root>
+          <mxCell id="0" />
+          <mxCell id="1" parent="0" />
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-1" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="User (CLI)" vertex="1">
+            <mxGeometry height="54" width="131" x="102" y="20" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-2" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="Spring Shell 4.0&#xa;(jarvis :&gt; prompt)" vertex="1">
+            <mxGeometry height="78" width="182" x="76" y="124" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-3" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="ChatStreamController&#xa;POST /api/v1/chat/stream" vertex="1">
+            <mxGeometry height="78" width="254" x="40" y="252" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-4" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="AiOrchestrator&#xa;Coordinates everything" vertex="1">
+            <mxGeometry height="78" width="226" x="54" y="380" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-5" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="PromptAssembler&#xa;+&#xa;ProviderRouter" vertex="1">
+            <mxGeometry height="102" width="185" x="75" y="508" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-6" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="Ollama&#xa;llama3.1:8b&#xa;Primary" vertex="1">
+            <mxGeometry height="102" width="122" x="20" y="660" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-7" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="Gemini&#xa;2.0-flash&#xa;Fallback" vertex="1">
+            <mxGeometry height="102" width="123" x="192" y="660" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-8" parent="1" style="whiteSpace=wrap;strokeWidth=2;fillColor=light-dark(#eeeeee,#1f2020);strokeColor=light-dark(#999999,#cccccc);fontColor=light-dark(#333333,#cccccc);" value="PostgreSQL&#xa;Sessions + Messages" vertex="1">
+            <mxGeometry height="78" width="200" x="67" y="812" as="geometry" />
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-9" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-1" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-2" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-10" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-2" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-3" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-11" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-3" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-4" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-12" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-4" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-5" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-13" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-5" style="curved=1;startArrow=none;endArrow=block;exitX=0.19;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-6" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="81" y="635" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-14" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-5" style="curved=1;startArrow=none;endArrow=block;exitX=0.81;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-7" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="254" y="635" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-15" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-6" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.24;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-8" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="81" y="787" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+          <mxCell id="SCGlZj5swCD9gWGE6OnE-16" edge="1" parent="1" source="SCGlZj5swCD9gWGE6OnE-7" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.76;entryY=0;rounded=0;" target="SCGlZj5swCD9gWGE6OnE-8" value="">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="254" y="787" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </root>
+      </mxGraphModel>
+    </diagram>
+  </mxfile>
