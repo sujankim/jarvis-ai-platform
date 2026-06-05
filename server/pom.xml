@@ -195,6 +195,12 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- Reactive Redis for session caching -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
         <!-- ========================= -->
         <!-- Spring AI 2.0             -->
         <!-- ========================= -->

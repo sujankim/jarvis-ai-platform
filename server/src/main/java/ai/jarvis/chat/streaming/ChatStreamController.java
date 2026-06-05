@@ -51,11 +51,10 @@ public class ChatStreamController {
                 .map(SecurityContext::getAuthentication)
                 .flatMapMany(auth -> {
 
-                    // Extract BOTH userId and username
-                    // from the security context
                     String userId = auth.getPrincipal()
                             .toString();
-                    String username = extractUsername(auth);
+                    String username =
+                            extractUsername(auth);
 
                     return resolveSession(
                             request.sessionId(),
@@ -65,35 +64,40 @@ public class ChatStreamController {
                             .flatMapMany(session -> {
 
                                 log.info(
-                                        "Chat: user={} sessionId={}",
-                                        username, session.id()
-                                );
+                                        "Chat: user={} session={}",
+                                        username, session.id());
 
                                 OrchestratorRequest orchRequest =
                                         OrchestratorRequest.of(
                                                 session.id(),
                                                 request.message(),
-                                                username, // ← REAL username
+                                                username,
                                                 extractRole(auth)
                                         );
 
                                 return orchestrator
                                         .chat(orchRequest)
                                         .map(token ->
-                                                ServerSentEvent.<String>builder()
+                                                ServerSentEvent
+                                                        .<String>builder()
                                                         .event("token")
                                                         .data(jsonToken(token))
                                                         .build()
                                         )
-                                        //  PREPEND session event BEFORE tokens
+                                        // Send session ID FIRST
+                                        // CLI stores this for
+                                        // next message continuity
                                         .startWith(
-                                                ServerSentEvent.<String>builder()
+                                                ServerSentEvent
+                                                        .<String>builder()
                                                         .event("session")
-                                                        .data(session.id().toString())
+                                                        .data(session.id()
+                                                                .toString())
                                                         .build()
                                         )
                                         .concatWith(Flux.just(
-                                                ServerSentEvent.<String>builder()
+                                                ServerSentEvent
+                                                        .<String>builder()
                                                         .event("done")
                                                         .data("[DONE]")
                                                         .build()
@@ -102,17 +106,7 @@ public class ChatStreamController {
                 });
     }
 
-    /**
-     * Wrap token in JSON to preserve spaces.
-     *
-     * Problem: SSE codec strips leading whitespace.
-     * " nice" → becomes "nice" after SSE parsing.
-     *
-     * Solution: {"t":" nice"} → JSON string preserves
-     * the space inside the JSON value.
-     */
     private String jsonToken(String token) {
-        // Simple JSON encoding - escape special chars
         return "{\"t\":\""
                 + token
                 .replace("\\", "\\\\")
@@ -123,12 +117,8 @@ public class ChatStreamController {
     }
 
     private String extractUsername(Authentication auth) {
-        // Details holds username (set in JWT filter)
         Object details = auth.getDetails();
-        if (details instanceof String s) {
-            return s;
-        }
-        // Fallback to principal if details not set
+        if (details instanceof String s) return s;
         return auth.getPrincipal().toString();
     }
 
@@ -167,8 +157,7 @@ public class ChatStreamController {
                 .insert(newSession)
                 .flatMap(saved ->
                         sessionRepository
-                                .setTitleIfNull(
-                                        saved.id(), title)
+                                .setTitleIfNull(saved.id(), title)
                                 .thenReturn(saved)
                 );
     }

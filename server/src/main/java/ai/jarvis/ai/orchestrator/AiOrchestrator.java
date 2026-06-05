@@ -5,8 +5,8 @@ import ai.jarvis.ai.prompt.WorkingMemoryBuilder;
 import ai.jarvis.ai.provider.AiProvider;
 import ai.jarvis.ai.provider.ProviderRouter;
 import ai.jarvis.chat.message.Message;
-import ai.jarvis.chat.message.MessageRepository;
 import ai.jarvis.chat.session.ChatSessionRepository;
+import ai.jarvis.memory.session.SessionMemoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,31 +25,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AiOrchestrator {
 
     private final ProviderRouter providerRouter;
-    private final MessageRepository messageRepository;
     private final ChatSessionRepository sessionRepository;
     private final R2dbcEntityTemplate r2dbcEntityTemplate;
     private final PromptAssembler promptAssembler;
     private final WorkingMemoryBuilder workingMemoryBuilder;
+    private final SessionMemoryService sessionMemoryService;
 
     public Flux<String> chat(OrchestratorRequest request) {
 
         long startTime = System.currentTimeMillis();
 
+        // Generate ID first so we can exclude it
+        // from history when building the prompt
+        UUID userMsgId = UUID.randomUUID();
+
         Message userMsg = Message.userMessage(
-                UUID.randomUUID(),
+                userMsgId,
                 request.sessionId(),
                 request.message()
         );
 
         return r2dbcEntityTemplate
                 .insert(userMsg)
-                .then(messageRepository
-                        .findBySessionIdOrderByCreatedAtAsc(
-                                request.sessionId())
-                        .collectList()
-                )
+                // Load history AFTER insert
+                // SessionMemoryService: Redis first, DB fallback
+                .then(sessionMemoryService.loadHistory(
+                        request.sessionId()))
                 .flatMap(history ->
-                        // Route to best provider first
                         providerRouter.route()
                                 .map(provider ->
                                         new ProviderAndHistory(
@@ -70,21 +71,23 @@ public class AiOrchestrator {
                                     provider.getModelName()
                             );
 
+                    // filter by ID instead of tail trim.
+                    // Tail trim breaks on Redis cache HIT because
+                    // the cached list may not include the new user
+                    // message yet. Filtering by ID works correctly
+                    // for both cache HIT and cache MISS.
                     List<Message> historyWithoutCurrent =
-                            history.subList(
-                                    0,
-                                    Math.max(
-                                            0,
-                                            history.size() - 1)
-                            );
+                            history.stream()
+                                    .filter(msg -> !msg.id()
+                                            .equals(userMsgId))
+                                    .toList();
 
-                    Prompt prompt = promptAssembler
-                            .assemble(
-                                    request.message(),
-                                    workingMemory,
-                                    historyWithoutCurrent,
-                                    request.username()
-                            );
+                    Prompt prompt = promptAssembler.assemble(
+                            request.message(),
+                            workingMemory,
+                            historyWithoutCurrent,
+                            request.username()
+                    );
 
                     StringBuilder responseBuilder =
                             new StringBuilder();
@@ -92,9 +95,8 @@ public class AiOrchestrator {
                             new AtomicInteger(0);
 
                     log.info(
-                            "AI request: user={} "
-                                    + "session={} provider={} "
-                                    + "model={} history={}",
+                            "AI request: user={} session={} "
+                                    + "provider={} model={} history={}",
                             request.username(),
                             request.sessionId(),
                             provider.getName(),
@@ -104,10 +106,8 @@ public class AiOrchestrator {
 
                     return provider.streamChat(prompt)
                             .doOnNext(token -> {
-                                responseBuilder
-                                        .append(token);
-                                tokenCount
-                                        .incrementAndGet();
+                                responseBuilder.append(token);
+                                tokenCount.incrementAndGet();
                             })
                             .doOnComplete(() -> {
                                 long duration =
@@ -115,9 +115,8 @@ public class AiOrchestrator {
                                                 - startTime;
 
                                 log.info(
-                                        "AI response: "
-                                                + "user={} tokens≈{} "
-                                                + "duration={}ms "
+                                        "AI response: user={} "
+                                                + "tokens≈{} duration={}ms "
                                                 + "provider={}",
                                         request.username(),
                                         tokenCount.get(),
@@ -125,21 +124,24 @@ public class AiOrchestrator {
                                         provider.getName()
                                 );
 
+                                // Save async — does not block stream
                                 saveAssistantMessage(
                                         request.sessionId(),
-                                        responseBuilder
-                                                .toString(),
+                                        responseBuilder.toString(),
                                         tokenCount.get(),
                                         (int) duration,
                                         provider.getModelName()
-                                ).subscribe();
+                                )
+                                        .doOnError(e ->
+                                                log.error(
+                                                        "Save assistant failed: {}",
+                                                        e.getMessage()))
+                                        .subscribe();
                             })
                             .doOnError(error -> {
                                 log.error(
-                                        "AI error: "
-                                                + "user={} "
-                                                + "provider={} "
-                                                + "error={}",
+                                        "AI error: user={} "
+                                                + "provider={} error={}",
                                         request.username(),
                                         provider.getName(),
                                         error.getMessage()
@@ -149,7 +151,18 @@ public class AiOrchestrator {
                                         error.getMessage()
                                 ).subscribe();
                             });
-                });
+                })
+                .doFinally(signal ->
+                        // Refresh cache after exchange completes
+                        // so next request gets updated history
+                        sessionMemoryService
+                                .onMessageSaved(request.sessionId())
+                                .doOnError(e ->
+                                        log.warn(
+                                                "Cache refresh failed: {}",
+                                                e.getMessage()))
+                                .subscribe()
+                );
     }
 
     // ── Private helpers ───────────────────────────
@@ -173,15 +186,35 @@ public class AiOrchestrator {
 
         return r2dbcEntityTemplate
                 .insert(assistantMsg)
-                .then(sessionRepository
-                        .incrementMessageCount(
-                                sessionId, tokens))
+                .doOnSuccess(saved ->
+                        log.debug("Assistant saved: {}",
+                                saved.id()))
+                .flatMap(saved ->
+                        sessionRepository
+                                .incrementMessageCount(
+                                        sessionId, tokens)
+                                .doOnSuccess(rows ->
+                                        log.debug(
+                                                "Session updated: rows={}",
+                                                rows))
+                                .doOnError(error ->
+                                        log.error(
+                                                "incrementMessageCount "
+                                                        + "failed [{}]: {}",
+                                                sessionId,
+                                                error.getMessage()))
+                )
+                .doOnError(error ->
+                        log.error(
+                                "saveAssistantMessage "
+                                        + "failed [{}]: {}",
+                                sessionId,
+                                error.getMessage(), error))
                 .then();
     }
 
     private Mono<Void> saveErrorMessage(
-            UUID sessionId,
-            String errorText) {
+            UUID sessionId, String errorText) {
         Message errorMsg = Message.errorMessage(
                 UUID.randomUUID(),
                 sessionId,
@@ -189,6 +222,10 @@ public class AiOrchestrator {
         );
         return r2dbcEntityTemplate
                 .insert(errorMsg)
+                .doOnError(e ->
+                        log.error(
+                                "saveErrorMessage failed: {}",
+                                e.getMessage()))
                 .then();
     }
 

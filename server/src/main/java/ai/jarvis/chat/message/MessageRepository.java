@@ -1,5 +1,6 @@
 package ai.jarvis.chat.message;
 
+import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
@@ -11,18 +12,27 @@ import java.util.UUID;
 public interface MessageRepository
         extends R2dbcRepository<Message, UUID> {
 
-    // Load all messages for a session (chronological order)
-    // This is the MOST IMPORTANT query — runs on every chat load
-    Flux<Message> findBySessionIdOrderByCreatedAtAsc(UUID sessionId);
-
-    // Load last N messages (for context window management)
-    Flux<Message> findTop20BySessionIdOrderByCreatedAtDesc(
+    // Full history (ascending) — for display
+    Flux<Message> findBySessionIdOrderByCreatedAtAsc(
             UUID sessionId);
 
-    // Count messages in a session
+    // Last N messages at DB level — for prompt context
+    // Fetches newest N rows, reverses for ascending order
+    @Query("""
+            SELECT * FROM (
+                SELECT * FROM messages
+                WHERE session_id = :sessionId
+                ORDER BY created_at DESC
+                LIMIT :limit
+            ) sub
+            ORDER BY created_at ASC
+            """)
+    Flux<Message> findLastNBySessionId(
+            UUID sessionId, int limit);
+
     Mono<Long> countBySessionId(UUID sessionId);
 
-    // Get only user + assistant messages (not system)
     Flux<Message> findBySessionIdAndRoleInOrderByCreatedAtAsc(
-            UUID sessionId, java.util.List<MessageRole> roles);
+            UUID sessionId,
+            java.util.List<MessageRole> roles);
 }
