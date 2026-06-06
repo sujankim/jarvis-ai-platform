@@ -10,15 +10,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 
-/**
- * Generates vector embeddings for text content.
- *
- * Uses Ollama nomic-embed-text (768 dimensions).
- * Free. Private. No API key needed.
- *
- * Spring AI auto-configures EmbeddingModel
- * from spring.ai.ollama.embedding config.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,13 +22,17 @@ public class EmbeddingService {
      * Ollama call is blocking → boundedElastic thread.
      */
     public Mono<float[]> embed(String text) {
+        // validate input before processing
+        if (text == null || text.isEmpty()) {
+            log.debug("Skipping embedding: null or empty text");
+            return Mono.empty();
+        }
+
         return Mono.fromCallable(() -> {
                     log.debug("Embedding: {}...",
                             text.substring(0,
                                     Math.min(50, text.length())));
 
-                    // null = use model default options
-                    // Official Spring AI pattern from docs
                     EmbeddingRequest request =
                             new EmbeddingRequest(
                                     List.of(text), null);
@@ -45,7 +40,15 @@ public class EmbeddingService {
                     float[] vector = embeddingModel
                             .call(request)
                             .getResults()
-                            .getFirst()   // Java 21
+                            .stream()
+                            .findFirst()
+                            .orElseThrow(() ->
+                                    new IllegalStateException(
+                                            "Embedding model returned "
+                                                    + "no results for text: "
+                                                    + text.substring(0,
+                                                    Math.min(30, text.length()))
+                                    ))
                             .getOutput();
 
                     log.debug("Generated {} dimensions",
@@ -64,12 +67,15 @@ public class EmbeddingService {
     /**
      * Generate embeddings for multiple texts at once.
      */
-    public Mono<List<float[]>> embedAll(
-            List<String> texts) {
+    public Mono<List<float[]>> embedAll(List<String> texts) {
+        // Fix: validate input
+        if (texts == null || texts.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
         return Mono.fromCallable(() -> {
                     EmbeddingRequest request =
-                            new EmbeddingRequest(
-                                    texts, null);
+                            new EmbeddingRequest(texts, null);
 
                     return embeddingModel
                             .call(request)
@@ -91,6 +97,9 @@ public class EmbeddingService {
      * Format: "[0.1,0.2,0.3,...]"
      */
     public String toVectorString(float[] embedding) {
+        if (embedding == null || embedding.length == 0) {
+            return "[]";
+        }
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < embedding.length; i++) {
             sb.append(embedding[i]);

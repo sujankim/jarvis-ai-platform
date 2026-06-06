@@ -19,6 +19,7 @@ jobs:
 
     services:
       postgres:
+        # Official pgvector image required for V10 migration
         image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: jarvis
@@ -33,12 +34,23 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      #  add Redis service so context loads correctly
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
           distribution: temurin
           java-version: 21
@@ -46,7 +58,6 @@ jobs:
 
       - name: Make Maven wrapper executable
         run: chmod +x server/mvnw
-
 
       - name: Build and test
         working-directory: server
@@ -57,10 +68,12 @@ jobs:
           DATABASE_USERNAME: jarvis
           DATABASE_PASSWORD: jarvis
           JARVIS_JWT_SECRET: test-secret-key-minimum-32-chars-long-enough
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-results
           path: server/target/surefire-reports/
