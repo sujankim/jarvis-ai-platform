@@ -10,7 +10,6 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
-      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
   # ── Database (R2DBC) ──────────────────────────────
   r2dbc:
@@ -22,6 +21,13 @@ spring:
       max-size: 15
       max-idle-time: 30m
       validation-query: SELECT 1
+
+  # ── JDBC DataSource (required for PgVector + Flyway) ──
+  datasource:
+    url: ${FLYWAY_URL:jdbc:postgresql://localhost:5433/jarvis}
+    username: ${DATABASE_USERNAME:jarvis}
+    password: ${DATABASE_PASSWORD:jarvis}
+    driver-class-name: org.postgresql.Driver
 
   # ── Database Migrations (Flyway) ──────────────────
   flyway:
@@ -68,10 +74,11 @@ spring:
 
     vectorstore:
       pgvector:
-        enabled: false
+        enabled: true              # ← Enable now
         index-type: hnsw
         distance-type: cosine_distance
-        dimensions: 768
+        dimensions: 768            # nomic-embed-text output
+        initialize-schema: false   # We manage schema via Flyway
 
   # ── Spring Shell ──────────────────────────────────
   main:

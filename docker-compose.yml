@@ -12,7 +12,10 @@
 services:
 
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.postgres
+    image: jarvis-postgres-pgvector:local
     container_name: jarvis-postgres
     restart: unless-stopped
     environment:
