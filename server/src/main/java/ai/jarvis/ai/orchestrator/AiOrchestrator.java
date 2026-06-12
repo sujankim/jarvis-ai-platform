@@ -6,6 +6,7 @@ import ai.jarvis.ai.provider.AiProvider;
 import ai.jarvis.ai.provider.ProviderRouter;
 import ai.jarvis.chat.message.Message;
 import ai.jarvis.chat.session.ChatSessionRepository;
+import ai.jarvis.memory.MemoryExtractionService;
 import ai.jarvis.memory.session.SessionMemoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ public class AiOrchestrator {
     private final PromptAssembler promptAssembler;
     private final WorkingMemoryBuilder workingMemoryBuilder;
     private final SessionMemoryService sessionMemoryService;
+    private final MemoryExtractionService memoryExtractionService;
 
     public Flux<String> chat(OrchestratorRequest request) {
 
@@ -137,6 +139,21 @@ public class AiOrchestrator {
                                                         "Save assistant failed: {}",
                                                         e.getMessage()))
                                         .subscribe();
+                                // ========== Extract memories ASYNC ==========
+                                // Fire‑and‑forget; never blocks chat streaming.
+                                // If extraction fails, only a debug log is emitted.
+                                memoryExtractionService
+                                        .extractAndSave(
+                                                request.userId(),
+                                                request.sessionId(),
+                                                request.message()
+                                        )
+                                        .subscribe(
+                                                null,
+                                                error -> log.debug(
+                                                        "Extraction skipped: {}",
+                                                        error.getMessage())
+                                        );
                             })
                             .doOnError(error -> {
                                 log.error(
