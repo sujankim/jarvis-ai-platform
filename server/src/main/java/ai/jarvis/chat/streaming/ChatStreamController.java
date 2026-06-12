@@ -72,7 +72,8 @@ public class ChatStreamController {
                                                 session.id(),
                                                 request.message(),
                                                 username,
-                                                extractRole(auth)
+                                                extractRole(auth),
+                                                UUID.fromString(userId)
                                         );
 
                                 return orchestrator
