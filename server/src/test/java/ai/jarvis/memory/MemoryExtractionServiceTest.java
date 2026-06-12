@@ -13,7 +13,6 @@ import reactor.test.StepVerifier;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,6 +27,7 @@ class MemoryExtractionServiceTest {
     @Mock
     private MemoryService memoryService;
 
+    private MemoryExtractionService service;
     private UUID userId;
     private UUID sessionId;
 
@@ -35,35 +35,53 @@ class MemoryExtractionServiceTest {
     void setUp() {
         userId = UUID.randomUUID();
         sessionId = UUID.randomUUID();
+        service = new MemoryExtractionService(
+                chatClientBuilder, memoryService);
     }
 
-    @Test
-    @DisplayName("extractAndSave() skips short messages")
-    void shouldSkipShortMessages() {
-        MemoryExtractionService service =
-                new MemoryExtractionService(
-                        chatClientBuilder,
-                        memoryService);
+    // ── Null/empty guard tests ────────────────────
 
-        // Messages shorter than 10 chars → skip
+    @Test
+    @DisplayName("skips extraction when userId is null")
+    void shouldSkipWhenUserIdIsNull() {
         StepVerifier
                 .create(service.extractAndSave(
-                        userId, sessionId, "hi"))
+                        null, sessionId,
+                        "I am building a Java platform"))
                 .verifyComplete();
 
-        // MemoryService should NEVER be called
         verify(memoryService, never())
                 .save(any(), any(), any(), any());
     }
 
     @Test
-    @DisplayName("extractAndSave() skips null messages")
-    void shouldSkipNullMessages() {
-        MemoryExtractionService service =
-                new MemoryExtractionService(
-                        chatClientBuilder,
-                        memoryService);
+    @DisplayName("skips extraction when sessionId is null")
+    void shouldSkipWhenSessionIdIsNull() {
+        StepVerifier
+                .create(service.extractAndSave(
+                        userId, null,
+                        "I am building a Java platform"))
+                .verifyComplete();
 
+        verify(memoryService, never())
+                .save(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("skips short messages under 10 chars")
+    void shouldSkipShortMessages() {
+        StepVerifier
+                .create(service.extractAndSave(
+                        userId, sessionId, "hi"))
+                .verifyComplete();
+
+        verify(memoryService, never())
+                .save(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("skips null messages")
+    void shouldSkipNullMessages() {
         StepVerifier
                 .create(service.extractAndSave(
                         userId, sessionId, null))
@@ -74,25 +92,13 @@ class MemoryExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("parseJsonArray returns empty for []")
-    void shouldHandleEmptyJsonArray() throws Exception {
-        // Test private method via reflection
-        // OR test via public extractAndSave behavior
-        // Using public API is better practice
-
-        MemoryExtractionService service =
-                new MemoryExtractionService(
-                        chatClientBuilder,
-                        memoryService);
-
-        // We can verify the behavior by checking
-        // memoryService is not called for empty result
-        // This is tested in integration tests
-        // For unit: verify short message skip works
+    @DisplayName("skips blank messages under 10 chars")
+    void shouldSkipBlankMessages() {
+        // Fix 4: correct name — this tests SHORT MESSAGE guard
+        // NOT the JSON array parser
         StepVerifier
                 .create(service.extractAndSave(
-                        userId, sessionId,
-                        "    "))   // blank
+                        userId, sessionId, "   "))
                 .verifyComplete();
 
         verify(memoryService, never())

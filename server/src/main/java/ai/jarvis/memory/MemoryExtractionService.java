@@ -3,42 +3,17 @@ package ai.jarvis.memory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Extracts long-term memories from user messages.
- *
- * WHEN CALLED:
- * After every AI response completes.
- * Always async — never blocks the chat stream.
- *
- * WHAT IT DOES:
- * 1. Takes the user's message
- * 2. Sends it to Ollama with extraction prompt
- * 3. Parses the JSON response
- * 4. Saves each extracted fact via MemoryService
- *
- * WHAT IT EXTRACTS:
- * FACT:       "User's name is Dravin"
- * GOAL:       "User is building Jarvis AI Platform"
- * PREFERENCE: "User prefers dark mode"
- * CONTEXT:    "User uses Windows 11, 16GB RAM"
- * EVENT:      "User published article on Dev.to"
- *
- * WHAT IT DOES NOT EXTRACT:
- * - Greetings ("hello", "hi")
- * - Questions without facts
- * - Temporary statements ("it's raining today")
- * - Very short/vague messages
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,19 +22,6 @@ public class MemoryExtractionService {
     private final ChatClient.Builder chatClientBuilder;
     private final MemoryService memoryService;
 
-    /**
-     * Extraction prompt template.
-     *
-     * WHY STRICT JSON FORMAT:
-     * We parse this programmatically.
-     * If AI returns free text → parsing fails.
-     * We explicitly tell it: return ONLY JSON.
-     *
-     * WHY SHORT LIMIT (max 3 facts):
-     * One message rarely has more than 3 key facts.
-     * Extracting too many = noise in memory.
-     * Quality over quantity.
-     */
     private static final String EXTRACTION_PROMPT = """
             You are a memory extraction assistant.
             Analyze the user message and extract important
@@ -91,31 +53,30 @@ public class MemoryExtractionService {
 
             Input: "hello how are you"
             Output: []
-
-            Input: "I'm building a Spring Boot AI platform"
-            Output: [
-              {"type":"GOAL","content":"User is building a Spring Boot AI platform"}
-            ]
             """;
 
-    /**
-     * Extract memories from a user message and save them.
-     *
-     * CALLED BY: AiOrchestrator.doOnComplete()
-     * RUNS ON: boundedElastic thread (blocking Ollama call)
-     * NEVER BLOCKS: the caller uses .subscribe() to fire-and-forget
-     *
-     * @param userId      who sent the message
-     * @param sessionId   which session this came from
-     * @param userMessage the actual message to analyze
-     */
+    // Fix 2: timeout constant — configurable and visible
+    private static final Duration EXTRACTION_TIMEOUT =
+            Duration.ofSeconds(15);
+
+    // Fix 3: hard cap enforced in code, not just in prompt
+    private static final int MAX_MEMORIES_PER_MESSAGE = 3;
+
     public Mono<Void> extractAndSave(
             UUID userId,
             UUID sessionId,
             String userMessage) {
 
-        // Skip extraction for very short messages
-        // "hi", "yes", "ok" → nothing to extract
+        // Fix 1: guard null identifiers FIRST
+        // Prevents wasted Ollama calls and DB errors
+        if (userId == null || sessionId == null) {
+            log.debug(
+                    "Skipping extraction: null "
+                            + "userId or sessionId");
+            return Mono.empty();
+        }
+
+        // Short messages have nothing to extract
         if (userMessage == null
                 || userMessage.trim().length() < 10) {
             return Mono.empty();
@@ -123,15 +84,16 @@ public class MemoryExtractionService {
 
         return Mono.fromCallable(() ->
                         callExtractionModel(userMessage))
-                // boundedElastic = thread pool for
-                // blocking calls (Ollama is blocking)
                 .subscribeOn(Schedulers.boundedElastic())
+                // Fix 2: timeout prevents thread starvation
+                // if Ollama is slow or unresponsive
+                .timeout(EXTRACTION_TIMEOUT)
                 .flatMap(json ->
                         parseAndSaveAll(
                                 json, userId, sessionId))
                 .onErrorResume(error -> {
+                    // Handles ALL errors including TimeoutException
                     // Extraction failure NEVER affects chat
-                    // Log quietly and continue
                     log.debug(
                             "Memory extraction skipped "
                                     + "for user={}: {}",
@@ -143,20 +105,6 @@ public class MemoryExtractionService {
 
     // ── Private Helpers ───────────────────────────
 
-    /**
-     * Call Ollama with extraction prompt.
-     * Returns raw JSON string from AI.
-     *
-     * WHY String not structured type:
-     * We parse manually to handle malformed JSON
-     * gracefully without crashing.
-     *
-     * WHY fromCallable + subscribeOn boundedElastic:
-     * ChatClient.call() is BLOCKING (not reactive).
-     * We must run it on a thread pool designed for
-     * blocking operations, NOT on the Netty event loop.
-     * Blocking on event loop = deadlock/starvation.
-     */
     private String callExtractionModel(
             String userMessage) {
 
@@ -175,22 +123,6 @@ public class MemoryExtractionService {
                 .content();
     }
 
-    /**
-     * Parse JSON array and save each memory.
-     *
-     * WHY MANUAL JSON PARSING:
-     * We do NOT use ObjectMapper here.
-     * Why? The AI might return slightly malformed JSON.
-     * ObjectMapper throws exception on any error.
-     * Manual parsing skips bad entries gracefully.
-     *
-     * EXAMPLE PARSING:
-     * Input:  [{"type":"FACT","content":"User likes Java"}]
-     * Step 1: Find all {"type":"...","content":"..."}
-     * Step 2: Extract type and content strings
-     * Step 3: Convert to MemoryType enum
-     * Step 4: Save via MemoryService
-     */
     private Mono<Void> parseAndSaveAll(
             String json,
             UUID userId,
@@ -202,7 +134,6 @@ public class MemoryExtractionService {
 
         String trimmed = json.trim();
 
-        // AI returned empty array → nothing to save
         if (trimmed.equals("[]")
                 || trimmed.equals("[ ]")) {
             log.debug(
@@ -211,7 +142,6 @@ public class MemoryExtractionService {
             return Mono.empty();
         }
 
-        // Parse each memory object from the JSON array
         List<ExtractedMemory> extracted =
                 parseJsonArray(trimmed);
 
@@ -220,15 +150,19 @@ public class MemoryExtractionService {
         }
 
         log.debug(
-                "Extracted {} memories for user={}",
-                extracted.size(), userId);
+                "Saving {} memories for user={}",
+                Math.min(extracted.size(),
+                        MAX_MEMORIES_PER_MESSAGE),
+                userId);
 
-        // Save all extracted memories
-        // concatMap = sequential (not parallel)
-        // Why sequential? MemoryService checks duplicates.
-        // Parallel could cause race condition.
         return reactor.core.publisher.Flux
                 .fromIterable(extracted)
+                // Fix 3: hard cap regardless of AI output
+                // Prompt says max 3, but AI is not 100% reliable
+                // .take(3) GUARANTEES max 3 saves
+                .take(MAX_MEMORIES_PER_MESSAGE)
+                // concatMap = sequential saves
+                // Prevents race condition in duplicate check
                 .concatMap(m ->
                         memoryService.save(
                                 userId,
@@ -239,17 +173,6 @@ public class MemoryExtractionService {
                 .then();
     }
 
-    /**
-     * Parse JSON array of memory objects.
-     *
-     * HANDLES MALFORMED JSON GRACEFULLY:
-     * If AI returns extra text around JSON,
-     * we try to find the JSON array within it.
-     * Each object parsed individually — bad ones skipped.
-     *
-     * @param json raw JSON string from AI
-     * @return list of valid ExtractedMemory objects
-     */
     private List<ExtractedMemory> parseJsonArray(
             String json) {
 
@@ -257,8 +180,6 @@ public class MemoryExtractionService {
                 new java.util.ArrayList<>();
 
         try {
-            // Find the JSON array boundaries
-            // AI sometimes adds text before/after
             int start = json.indexOf('[');
             int end = json.lastIndexOf(']');
 
@@ -270,16 +191,13 @@ public class MemoryExtractionService {
             String array = json.substring(
                     start + 1, end);
 
-            // Simple regex to find each object
-            // Pattern: {"type":"TYPE","content":"text"}
             java.util.regex.Pattern pattern =
                     java.util.regex.Pattern.compile(
                             "\\{[^}]*\"type\"\\s*:\\s*"
                                     + "\"([^\"]+)\"[^}]*"
                                     + "\"content\"\\s*:\\s*"
                                     + "\"([^\"]+)\"[^}]*\\}",
-                            java.util.regex.Pattern
-                                    .DOTALL
+                            java.util.regex.Pattern.DOTALL
                     );
 
             java.util.regex.Matcher matcher =
@@ -303,7 +221,6 @@ public class MemoryExtractionService {
                                     type, content));
 
                 } catch (IllegalArgumentException e) {
-                    // Unknown type → skip this entry
                     log.debug(
                             "Skipping unknown memory type: {}",
                             matcher.group(1));
@@ -311,7 +228,6 @@ public class MemoryExtractionService {
             }
 
         } catch (Exception e) {
-            // Any parsing error → return what we have
             log.debug(
                     "JSON parse partial failure: {}",
                     e.getClass().getSimpleName());
@@ -320,12 +236,6 @@ public class MemoryExtractionService {
         return results;
     }
 
-    // ── Inner Record ──────────────────────────────
-
-    /**
-     * Represents one extracted memory before saving.
-     * Temporary data class — not stored in DB directly.
-     */
     private record ExtractedMemory(
             MemoryType type,
             String content) {}
