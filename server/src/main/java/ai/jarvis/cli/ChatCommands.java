@@ -10,6 +10,7 @@ import org.springframework.shell.core.command.annotation.Command;
 import org.springframework.shell.core.command.annotation.Option;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -167,8 +168,13 @@ public class ChatCommands {
                     System.out.print(token);
                     System.out.flush();
                 },
-                () -> {
+                stats -> {
                     System.out.println();
+                    String statsLine =
+                            formatStreamStats(stats);
+                    if (!statsLine.isEmpty()) {
+                        System.out.println(statsLine);
+                    }
                     System.out.println();
                     System.out.flush();
                 },
@@ -178,6 +184,19 @@ public class ChatCommands {
                                     + formatError(error));
                     System.out.flush();
                 }
+        );
+    }
+
+    static String formatStreamStats(
+            CliHttpClient.StreamStats stats) {
+        if (stats == null || stats.tokens() <= 0) {
+            return "";
+        }
+        return String.format(
+                Locale.ROOT,
+                "        -- %d tokens · %.1fs --",
+                stats.tokens(),
+                stats.durationMs() / 1000.0
         );
     }
 
