@@ -84,19 +84,17 @@ public class MemoryService {
         // we should not store "User uses Java" twice.
         // .flatMap() here because existsByUserId...
         // is an async database call (returns Mono<Boolean>)
+        // Application-level check (fast path optimization)
+        // DB unique constraint is the real safety net
         return memoryRepository
                 .existsByUserIdAndContentIgnoreCase(
                         userId, trimmedContent)
                 .flatMap(exists -> {
                     if (exists) {
                         log.debug(
-                                "Skipping duplicate memory: "
-                                        + "user={} content preview={}",
-                                userId,
-                                trimmedContent.substring(0,
-                                        Math.min(30,
-                                                trimmedContent.length()))
-                        );
+                                "Skipping duplicate memory "
+                                        + "for user={}",
+                                userId);
                         return Mono.empty();
                     }
 
@@ -120,9 +118,28 @@ public class MemoryService {
                                             "Memory saved: "
                                                     + "type={} user={}",
                                             saved.type(),
-                                            saved.userId()
-                                    )
-                            );
+                                            saved.userId())
+                            )
+                            // Handle DB unique constraint violation
+                            // (concurrent insert race condition)
+                            .onErrorResume(error -> {
+                                String msg = error.getMessage();
+                                if (msg != null && (
+                                        msg.contains("unique")
+                                                || msg.contains("duplicate")
+                                                || msg.contains("23505"))) {
+                                    // PostgreSQL error code 23505
+                                    // = unique_violation
+                                    log.debug(
+                                            "Concurrent duplicate "
+                                                    + "prevented by DB "
+                                                    + "constraint: user={}",
+                                            userId);
+                                    return Mono.empty();
+                                }
+                                // Other errors: re-throw
+                                return Mono.error(error);
+                            });
                 });
     }
 
@@ -191,6 +208,11 @@ public class MemoryService {
      * @param limit  max memories to return
      */
     public Flux<Memory> getTop(UUID userId, int limit) {
+        // Guard: negative or zero limit returns nothing
+        if (limit <= 0) {
+            return Flux.empty();
+        }
+
         return memoryRepository
                 .findTopMemoriesByUserId(userId, limit)
                 .doOnNext(memory ->
@@ -200,7 +222,7 @@ public class MemoryService {
                         memoryRepository
                                 .incrementAccessCount(memory.id())
                                 .subscribe(
-                                        null,  // onNext: ignore
+                                        null,
                                         error -> log.warn(
                                                 "Access count update "
                                                         + "failed for memory={}: {}",
@@ -345,6 +367,10 @@ public class MemoryService {
      */
     public Mono<String> formatForPrompt(
             UUID userId, int maxMemories) {
+        // Guard: invalid limit returns empty string
+        if (maxMemories <= 0) {
+            return Mono.just("");
+        }
 
         return getTop(userId, maxMemories)
                 .collectList()
@@ -359,9 +385,7 @@ public class MemoryService {
 
                     // Build the formatted string
                     StringBuilder sb = new StringBuilder();
-                    sb.append(
-                            "=== WHAT I KNOW ABOUT YOU ===\n");
-
+                    sb.append("=== WHAT I KNOW ABOUT YOU ===\n");
                     for (Memory memory : memories) {
                         sb.append("- [")
                                 .append(memory.type().name())
@@ -369,7 +393,6 @@ public class MemoryService {
                                 .append(memory.content())
                                 .append("\n");
                     }
-
                     sb.append("============================");
                     return sb.toString();
                 });

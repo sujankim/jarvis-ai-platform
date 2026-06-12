@@ -8,6 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -16,8 +17,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;  // ← ADD
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,6 +55,8 @@ class MemoryServiceTest {
         );
     }
 
+    // ── save() tests ──────────────────────────────
+
     @Test
     @DisplayName("save() returns empty for blank content")
     void saveShouldReturnEmptyForBlankContent() {
@@ -67,7 +72,8 @@ class MemoryServiceTest {
     void saveShouldSkipDuplicates() {
         when(memoryRepository
                 .existsByUserIdAndContentIgnoreCase(
-                        userId, "User is building Jarvis"))
+                        userId,
+                        "User is building Jarvis"))
                 .thenReturn(Mono.just(true));
 
         StepVerifier
@@ -102,6 +108,22 @@ class MemoryServiceTest {
                 .verifyComplete();
     }
 
+    // ── getTop() tests ────────────────────────────
+
+    @Test
+    @DisplayName("getTop() returns empty for limit <= 0")
+    void getTopShouldReturnEmptyForNonPositiveLimit() {
+        StepVerifier
+                .create(memoryService.getTop(userId, 0))
+                .verifyComplete();
+
+        StepVerifier
+                .create(memoryService.getTop(userId, -1))
+                .verifyComplete();
+    }
+
+    // ── count() tests ─────────────────────────────
+
     @Test
     @DisplayName("count() returns correct count")
     void countShouldReturnCorrectCount() {
@@ -114,17 +136,75 @@ class MemoryServiceTest {
                 .verifyComplete();
     }
 
+    // ── delete() tests ─────────────────────────────
+
+    @Test
+    @DisplayName("delete() returns 404 when not owned")
+    void deleteShouldReturn404WhenNotOwned() {
+        UUID memoryId = UUID.randomUUID();
+
+        when(memoryRepository
+                .findByIdAndUserId(memoryId, userId))
+                .thenReturn(Mono.empty());
+
+        StepVerifier
+                .create(memoryService
+                        .delete(memoryId, userId))
+                .expectErrorMatches(ex ->
+                        ex instanceof ResponseStatusException rse
+                                && rse.getStatusCode().value() == 404)
+                .verify();
+
+        // Verify delete was NEVER called
+        // (ownership check failed correctly)
+        verify(memoryRepository, never())
+                .delete(any(Memory.class));
+    }
+
+    @Test
+    @DisplayName("delete() succeeds when owned by user")
+    void deleteShouldSucceedWhenOwned() {
+        UUID memoryId = testMemory.id();
+
+        when(memoryRepository
+                .findByIdAndUserId(memoryId, userId))
+                .thenReturn(Mono.just(testMemory));
+
+        when(memoryRepository.delete(testMemory))
+                .thenReturn(Mono.empty());
+
+        StepVerifier
+                .create(memoryService
+                        .delete(memoryId, userId))
+                .verifyComplete();
+
+        // Verify delete WAS called with correct memory
+        verify(memoryRepository).delete(testMemory);
+    }
+
+    // ── formatForPrompt() tests ───────────────────
+
+    @Test
+    @DisplayName("formatForPrompt() empty for limit <= 0")
+    void formatForPromptShouldReturnEmptyForZeroLimit() {
+        StepVerifier
+                .create(memoryService
+                        .formatForPrompt(userId, 0))
+                .expectNext("")
+                .verifyComplete();
+    }
+
     @Test
     @DisplayName("formatForPrompt() empty when no memories")
     void formatForPromptShouldReturnEmptyForNoMemories() {
-        // ← FIX: anyInt() for primitive int parameter
         when(memoryRepository
                 .findTopMemoriesByUserId(
                         eq(userId), anyInt()))
                 .thenReturn(Flux.empty());
 
         StepVerifier
-                .create(memoryService.formatForPrompt(userId))
+                .create(memoryService
+                        .formatForPrompt(userId))
                 .expectNext("")
                 .verifyComplete();
     }
@@ -132,7 +212,6 @@ class MemoryServiceTest {
     @Test
     @DisplayName("formatForPrompt() includes type and content")
     void formatForPromptShouldIncludeMemories() {
-        // anyInt() for primitive int parameter
         when(memoryRepository
                 .findTopMemoriesByUserId(
                         eq(userId), anyInt()))
@@ -143,7 +222,8 @@ class MemoryServiceTest {
                 .thenReturn(Mono.just(1));
 
         StepVerifier
-                .create(memoryService.formatForPrompt(userId))
+                .create(memoryService
+                        .formatForPrompt(userId))
                 .expectNextMatches(result ->
                         result.contains("[FACT]")
                                 && result.contains(
