@@ -67,7 +67,7 @@ public class AiOrchestrator {
                                         request.sessionId()),
                                 // Right: formatted memory context
                                 // Empty string if no userId or no memories
-                                loadMemoryContext(request.userId())
+                                loadMemoryContext(request.userId(), request.message())
                         )
                 )
                 .flatMap(tuple -> {
@@ -225,17 +225,17 @@ public class AiOrchestrator {
      * @param userId owner of the memories
      * @return formatted memory string or empty string
      */
-    private Mono<String> loadMemoryContext(UUID userId) {
+    private Mono<String> loadMemoryContext(
+            UUID userId,
+            String userQuery) {
+
         if (userId == null) {
             return Mono.just("");
         }
 
         return memoryService
-                .formatForPrompt(userId)
+                .formatForPrompt(userId, userQuery)
                 .onErrorReturn("")
-                // If memory service fails:
-                // return empty (chat must never fail
-                // because of memory service issues)
                 .defaultIfEmpty("");
     }
 
