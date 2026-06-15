@@ -14,21 +14,21 @@ import java.util.UUID;
 /**
  * Core memory management service.
  *
- * WHAT THIS SERVICE DOES:
- * Coordinates between the outside world (controllers, CLI)
- * and the database (MemoryRepository).
+ * RESPONSIBILITIES:
+ * - Save memories (with and without embeddings)
+ * - Retrieve memories (by importance or semantically)
+ * - Delete memories (with ownership verification)
+ * - Format memories for AI prompt injection
  *
- * BUSINESS RULES ENFORCED HERE:
- * 1. No empty content saved
- * 2. No duplicate memories for same user
- * 3. Only owner can delete their memory
- * 4. Access count tracked when memories retrieved
- * 5. Memories formatted correctly for prompt injection
+ * PHASE 2 FEATURES:
+ * - saveWithEmbedding(): generates and stores pgvector embedding
+ * - formatForPrompt(userId, userQuery): semantic search first,
+ *   falls back to importance-based if no embeddings available
  *
- * WHY SEPARATE FROM REPOSITORY:
- * Repository only knows SQL operations.
- * Service knows the RULES of the application.
- * Keeping them separate makes both easier to test.
+ * SECURITY:
+ * - Ownership verified before delete (404 not 403)
+ * - DB unique constraint prevents concurrent duplicates
+ * - Application-level duplicate check as fast-path optimization
  */
 @Slf4j
 @Service
@@ -37,29 +37,43 @@ public class MemoryService {
 
     private final MemoryRepository memoryRepository;
     private final R2dbcEntityTemplate r2dbcEntityTemplate;
+    private final EmbeddingService embeddingService;
+    private final MemoryEmbeddingRepository
+            embeddingRepository;
 
-    // Maximum memories to inject into one prompt
-    // Too many = fills context window
-    // Too few = misses important context
+    /**
+     * Default number of memories to inject into one prompt.
+     * Too many = fills context window.
+     * Too few = misses important context.
+     */
     private static final int DEFAULT_PROMPT_LIMIT = 5;
+
+    /**
+     * Minimum cosine similarity for semantic search results.
+     * Below this = probably not relevant to the query.
+     * Range: 0.0 (unrelated) to 1.0 (identical meaning)
+     */
+    private static final double MIN_SIMILARITY = 0.5;
 
     // ── Save Operations ───────────────────────────
 
     /**
-     * Save a memory extracted from a conversation.
-     *
-     * WHY: AiOrchestrator calls this after each chat
-     * to store what Jarvis learned about the user.
+     * Save a memory with duplicate prevention.
      *
      * BUSINESS RULES:
-     * 1. Content must not be blank
-     * 2. Skip if identical memory already exists
-     *    (prevents duplicate extraction)
+     * 1. Blank content is rejected immediately
+     * 2. Application-level duplicate check (fast path)
+     * 3. DB unique constraint catches concurrent duplicates
+     * 4. PostgreSQL error 23505 handled gracefully
      *
-     * @param userId        who this memory belongs to
+     * NOTE: Does NOT generate embedding.
+     * Use saveWithEmbedding() for semantic search support.
+     *
+     * @param userId        owner of this memory
      * @param type          FACT/GOAL/PREFERENCE/CONTEXT/EVENT
      * @param content       the actual memory text
-     * @param sourceSession which session this came from
+     * @param sourceSession which session this came from (null = manual)
+     * @return saved Memory or empty if duplicate/blank
      */
     public Mono<Memory> save(
             UUID userId,
@@ -67,9 +81,6 @@ public class MemoryService {
             String content,
             UUID sourceSession) {
 
-        // Rule 1: Reject empty content
-        // Empty strings waste DB space and
-        // confuse the AI when injected into prompts
         if (content == null || content.isBlank()) {
             log.debug(
                     "Skipping empty memory for user={}",
@@ -79,13 +90,6 @@ public class MemoryService {
 
         String trimmedContent = content.trim();
 
-        // Rule 2: Check for duplicate before saving
-        // If user said "I use Java" twice in two sessions,
-        // we should not store "User uses Java" twice.
-        // .flatMap() here because existsByUserId...
-        // is an async database call (returns Mono<Boolean>)
-        // Application-level check (fast path optimization)
-        // DB unique constraint is the real safety net
         return memoryRepository
                 .existsByUserIdAndContentIgnoreCase(
                         userId, trimmedContent)
@@ -98,19 +102,15 @@ public class MemoryService {
                         return Mono.empty();
                     }
 
-                    // No duplicate — create and save
                     Memory memory = Memory.create(
                             userId,
                             type,
                             trimmedContent,
-                            sourceSession
-                    );
+                            sourceSession);
 
-                    // Use insert() not save()!
+                    // Use insert() not save()
                     // save() with non-null UUID = UPDATE
                     // insert() always = INSERT
-                    // We learned this lesson the hard way
-                    // during authentication implementation
                     return r2dbcEntityTemplate
                             .insert(memory)
                             .doOnSuccess(saved ->
@@ -118,41 +118,81 @@ public class MemoryService {
                                             "Memory saved: "
                                                     + "type={} user={}",
                                             saved.type(),
-                                            saved.userId())
-                            )
-                            // Handle DB unique constraint violation
-                            // (concurrent insert race condition)
+                                            saved.userId()))
                             .onErrorResume(error -> {
-                                String msg = error.getMessage();
+                                String msg =
+                                        error.getMessage();
+                                // Handle concurrent insert race
+                                // PostgreSQL 23505 = unique_violation
                                 if (msg != null && (
                                         msg.contains("unique")
                                                 || msg.contains("duplicate")
                                                 || msg.contains("23505"))) {
-                                    // PostgreSQL error code 23505
-                                    // = unique_violation
                                     log.debug(
-                                            "Concurrent duplicate "
-                                                    + "prevented by DB "
-                                                    + "constraint: user={}",
+                                            "DB constraint prevented "
+                                                    + "duplicate: user={}",
                                             userId);
                                     return Mono.empty();
                                 }
-                                // Other errors: re-throw
                                 return Mono.error(error);
                             });
                 });
     }
 
     /**
+     * Save memory AND generate + store its embedding.
+     *
+     * PREFERRED save method for Phase 2.
+     * Called by MemoryExtractionService after each chat.
+     *
+     * FLOW:
+     * 1. Save memory record to DB via R2DBC (fast, ~10ms)
+     * 2. Generate embedding via Ollama (~200ms, on boundedElastic)
+     * 3. Store embedding via JDBC/pgvector (~10ms)
+     *
+     * RESILIENCE:
+     * If embedding generation fails: memory is still saved.
+     * Semantic search skips memories without embeddings.
+     * Importance-based search acts as fallback.
+     *
+     * @param userId        owner of this memory
+     * @param type          FACT/GOAL/PREFERENCE/CONTEXT/EVENT
+     * @param content       the actual memory text
+     * @param sourceSession which session this came from
+     * @return saved Memory (with or without embedding)
+     */
+    public Mono<Memory> saveWithEmbedding(
+            UUID userId,
+            MemoryType type,
+            String content,
+            UUID sourceSession) {
+
+        return save(userId, type, content, sourceSession)
+                .flatMap(savedMemory ->
+                        embeddingService
+                                // Fix 2: use savedMemory.content()
+                                // not raw content parameter.
+                                // save() trims whitespace before storing.
+                                // Embedding must match stored text exactly.
+                                .embed(savedMemory.content())
+                                .flatMap(embedding ->
+                                        embeddingRepository
+                                                .storeEmbedding(
+                                                        savedMemory.id(),
+                                                        embedding)
+                                                .thenReturn(savedMemory)
+                                )
+                                .onErrorReturn(savedMemory)
+                                .defaultIfEmpty(savedMemory)
+                );
+    }
+
+    /**
      * Save a memory added manually by the user.
+     * No session reference (CLI or API origin).
+     * Delegates to save() for duplicate checking.
      *
-     * WHY SEPARATE FROM save():
-     * Manual memories have no sourceSession.
-     * They come from CLI "memory add" command.
-     * The user explicitly chose to remember this.
-     * We still check for duplicates.
-     *
-     * @param userId  who this memory belongs to
+     * @param userId  owner of this memory
      * @param type    FACT/GOAL/PREFERENCE/CONTEXT/EVENT
      * @param content the actual memory text
      */
@@ -160,25 +200,14 @@ public class MemoryService {
             UUID userId,
             MemoryType type,
             String content) {
-
-        // Delegate to save() with null sourceSession
-        // save() handles all validation rules
         return save(userId, type, content, null);
     }
 
     // ── Retrieve Operations ───────────────────────
 
     /**
-     * Get ALL memories for a user.
-     *
-     * WHY: Used by CLI "memory list" command
-     * and REST API GET /api/v1/memories.
-     *
-     * Returns Flux not List because:
-     * → Flux = reactive stream (non-blocking)
-     * → Items delivered ONE BY ONE as DB reads them
-     * → Works perfectly with WebFlux SSE streaming
-     * → More memory efficient for large lists
+     * Get ALL memories for a user ordered by importance.
+     * Used by CLI "memory list" and REST API.
      *
      * @param userId who to fetch memories for
      */
@@ -188,37 +217,21 @@ public class MemoryService {
     }
 
     /**
-     * Get top N memories for prompt injection.
+     * Get top N memories ordered by importance + access count.
+     * Used as fallback when semantic search unavailable.
+     * Also tracks access count for relevance scoring.
      *
-     * WHY: Called by PromptAssembler before every
-     * AI request to inject relevant context.
-     *
-     * ALSO TRACKS ACCESS:
-     * Each retrieved memory gets access_count++
-     * This makes the system smarter over time:
-     * frequently accessed memories rank higher.
-     *
-     * WHY ASYNC ACCESS TRACKING:
-     * We fire-and-forget the incrementAccessCount.
-     * We do NOT wait for it to complete.
-     * Why? The user is waiting for AI response.
-     * We must not slow down the chat for bookkeeping.
-     *
-     * @param userId how to fetch memories for
-     * @param limit  max memories to return
+     * @param userId who to fetch memories for
+     * @param limit  max memories to return (must be positive)
      */
     public Flux<Memory> getTop(UUID userId, int limit) {
-        // Guard: negative or zero limit returns nothing
         if (limit <= 0) {
             return Flux.empty();
         }
-
         return memoryRepository
                 .findTopMemoriesByUserId(userId, limit)
                 .doOnNext(memory ->
-                        // Track access ASYNC
-                        // .subscribe() = fire and forget
-                        // Does NOT block the stream
+                        // Track access async — never blocks the stream
                         memoryRepository
                                 .incrementAccessCount(memory.id())
                                 .subscribe(
@@ -227,13 +240,12 @@ public class MemoryService {
                                                 "Access count update "
                                                         + "failed for memory={}: {}",
                                                 memory.id(),
-                                                error.getMessage())
-                                )
+                                                error.getMessage()))
                 );
     }
 
     /**
-     * Get top memories using default limit (5).
+     * Get top memories using default limit.
      * Convenience method for prompt injection.
      *
      * @param userId who to fetch memories for
@@ -243,10 +255,8 @@ public class MemoryService {
     }
 
     /**
-     * Get memories filtered by type.
-     *
-     * WHY: When user says "show my goals"
-     * we only want GOAL type memories.
+     * Get memories filtered by specific type.
+     * Used for targeted retrieval (e.g. only GOALs).
      *
      * @param userId who to fetch memories for
      * @param type   which type to filter by
@@ -260,9 +270,7 @@ public class MemoryService {
 
     /**
      * Count total memories for a user.
-     *
-     * WHY: CLI "memory list" shows count in header.
-     * "Your memories (47 total)"
+     * Used by CLI "memory list" header display.
      *
      * @param userId who to count memories for
      */
@@ -273,20 +281,12 @@ public class MemoryService {
     // ── Delete Operations ─────────────────────────
 
     /**
-     * Delete a specific memory.
+     * Delete a specific memory with ownership verification.
      *
-     * SECURITY RULE:
-     * Verify the memory belongs to this user
-     * BEFORE deleting it.
-     *
-     * WHY THIS MATTERS:
-     * Without this check:
-     * User A could delete User B's memories
-     * by guessing UUIDs.
-     *
-     * With findByIdAndUserId():
-     * → If memory exists AND belongs to userId → delete
-     * → If memory not found OR wrong user → 404 error
+     * SECURITY:
+     * Returns 404 (not 403) whether memory missing OR wrong owner.
+     * This prevents attackers learning whether a memory ID exists.
+     * Verified by checking findByIdAndUserId before deleting.
      *
      * @param memoryId which memory to delete
      * @param userId   must be the owner
@@ -297,34 +297,22 @@ public class MemoryService {
         return memoryRepository
                 .findByIdAndUserId(memoryId, userId)
                 .switchIfEmpty(Mono.error(
-                        // 404 if not found OR wrong owner
-                        // We say "not found" not "forbidden"
-                        // This prevents attackers from knowing
-                        // if a memory ID exists at all
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,
                                 "Memory not found"
                         )
                 ))
-                .flatMap(memory ->
-                        memoryRepository.delete(memory)
-                )
+                .flatMap(memoryRepository::delete)
                 .doOnSuccess(v ->
                         log.info(
                                 "Memory deleted: id={} user={}",
-                                memoryId, userId)
-                );
+                                memoryId, userId));
     }
 
     /**
      * Delete ALL memories for a user.
-     *
-     * WHY: CLI "memory clear" command.
-     * User explicitly wants to wipe their memory.
-     *
-     * NOTE: No ownership check needed here because
-     * we use userId directly — user can only delete
-     * their OWN memories by definition.
+     * Used by CLI "memory clear" command.
+     * No ownership check needed — userId is the scope.
      *
      * @param userId who to clear memories for
      */
@@ -334,58 +322,131 @@ public class MemoryService {
                 .doOnSuccess(v ->
                         log.info(
                                 "All memories cleared: user={}",
-                                userId)
-                );
+                                userId));
     }
 
     // ── Prompt Formatting ─────────────────────────
 
     /**
-     * Format top memories as a string for AI prompt.
+     * Format memories for AI prompt injection with semantic search.
      *
-     * WHY: PromptAssembler calls this to get a
-     * formatted string to inject into the AI prompt.
+     * STRATEGY:
+     * 1. If userQuery provided: embed it and search by similarity
+     * 2. If semantic search returns results: use them
+     * 3. Otherwise fall back to importance-based lookup
+     * 4. If no memories at all: return empty string
      *
-     * OUTPUT EXAMPLE:
-     * "=== WHAT I KNOW ABOUT YOU ===
-     *  - [FACT] Your name is Dravin
-     *  - [GOAL] Building Jarvis AI Platform
-     *  - [PREFERENCE] Prefers detailed explanations
-     *  ==========================="
+     * CALLED BY: AiOrchestrator before every AI request
      *
-     * The AI reads this and uses it to personalize
-     * responses WITHOUT us explicitly saying anything.
-     *
-     * WHY Mono<String> not String:
-     * We need to call the database (async).
-     * Database calls return Mono/Flux.
-     * We chain: DB call → collect list → format string
-     * All non-blocking via Reactor operators.
-     *
-     * @param userId     whose memories to format
-     * @param maxMemories how many to include
+     * @param userId    whose memories to search
+     * @param userQuery current user message for semantic matching
+     * @return formatted memory string for PromptAssembler injection
      */
     public Mono<String> formatForPrompt(
-            UUID userId, int maxMemories) {
-        // Guard: invalid limit returns empty string
-        if (maxMemories <= 0) {
-            return Mono.just("");
+            UUID userId,
+            String userQuery) {
+
+        if (userQuery != null && !userQuery.isBlank()) {
+            return embeddingService
+                    .embed(userQuery)
+                    .flatMap(queryEmbedding ->
+                            embeddingRepository
+                                    .searchSimilar(
+                                            userId,
+                                            queryEmbedding,
+                                            DEFAULT_PROMPT_LIMIT,
+                                            MIN_SIMILARITY)
+                                    .collectList()
+                    )
+                    .flatMap(results -> {
+                        if (!results.isEmpty()) {
+                            log.debug(
+                                    "Semantic search found {} "
+                                            + "memories for user={}",
+                                    results.size(), userId);
+
+                            StringBuilder sb =
+                                    new StringBuilder();
+                            sb.append(
+                                    "=== WHAT I KNOW "
+                                            + "ABOUT YOU ===\n");
+                            for (var r : results) {
+                                log.debug(
+                                        "Memory: similarity={} "
+                                                + "type={}",
+                                        String.format(
+                                                "%.2f", r.similarity()),
+                                        r.type());
+                                sb.append("- [")
+                                        .append(r.type().name())
+                                        .append("] ")
+                                        .append(r.content())
+                                        .append("\n");
+                            }
+                            sb.append(
+                                    "============================");
+                            return Mono.just(sb.toString());
+                        }
+
+                        log.debug(
+                                "No semantic results for user={}, "
+                                        + "using importance fallback",
+                                userId);
+                        return fallbackFormat(userId);
+                    })
+                    .onErrorResume(error -> {
+                        log.debug(
+                                "Semantic search failed for "
+                                        + "user={}, using fallback: {}",
+                                userId,
+                                error.getClass().getSimpleName());
+                        return fallbackFormat(userId);
+                    })
+                    // Fix: Mono.defer makes fallback LAZY
+                    // Only evaluated if source Mono is empty
+                    // Without defer: fallbackFormat() called
+                    // immediately even when source has value
+                    .switchIfEmpty(
+                            Mono.defer(() ->
+                                    fallbackFormat(userId)));
         }
 
-        return getTop(userId, maxMemories)
+        return fallbackFormat(userId);
+    }
+
+    /**
+     * Format memories by importance without semantic search.
+     * Backward-compatible method — used when no user query available.
+     *
+     * @param userId whose memories to format
+     * @return formatted memory string or empty string
+     */
+    public Mono<String> formatForPrompt(UUID userId) {
+        return fallbackFormat(userId);
+    }
+
+    // ── Private Helpers ───────────────────────────
+
+    /**
+     * Format top memories by importance as prompt string.
+     * Used as fallback when semantic search is unavailable.
+     *
+     * @param userId whose memories to load
+     * @return formatted string or empty string if no memories
+     */
+    private Mono<String> fallbackFormat(UUID userId) {
+        return getTop(userId, DEFAULT_PROMPT_LIMIT)
                 .collectList()
-                // .map() here because formatting a List
-                // is synchronous (no more DB calls)
                 .map(memories -> {
-                    // If no memories: return empty string
-                    // PromptAssembler skips empty strings
                     if (memories.isEmpty()) {
                         return "";
                     }
 
-                    // Build the formatted string
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("=== WHAT I KNOW ABOUT YOU ===\n");
+                    StringBuilder sb =
+                            new StringBuilder();
+                    sb.append(
+                            "=== WHAT I KNOW "
+                                    + "ABOUT YOU ===\n");
                     for (Memory memory : memories) {
                         sb.append("- [")
                                 .append(memory.type().name())
@@ -393,18 +454,9 @@ public class MemoryService {
                                 .append(memory.content())
                                 .append("\n");
                     }
-                    sb.append("============================");
+                    sb.append(
+                            "============================");
                     return sb.toString();
                 });
-    }
-
-    /**
-     * Format using default limit.
-     * Convenience method for PromptAssembler.
-     *
-     * @param userId whose memories to format
-     */
-    public Mono<String> formatForPrompt(UUID userId) {
-        return formatForPrompt(userId, DEFAULT_PROMPT_LIMIT);
     }
 }
