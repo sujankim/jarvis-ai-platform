@@ -1,11 +1,11 @@
 # 🗺️ Jarvis AI Platform — Roadmap
 
 > **Last Updated:** June 2026
-> **Current Status:** Phase 2 — In Progress 🔨
+> **Current Status:** Phase 3 — In Progress 🔨
 
 ---
 
-## 📊 Status Legend
+# 📊 Status Legend
 
 | Symbol | Meaning        |
 | ------ | -------------- |
@@ -13,174 +13,179 @@
 | 🔨     | In Progress    |
 | 📋     | Planned        |
 | 💭     | Considering    |
-| ❌      | Will NOT build |
+| ❌      | Will NOT Build |
 
 ---
 
-## 🏗️ Phase 0 — Foundation ✅ Complete
+# 🏗️ Phase 0 — Foundation ✅ Complete
 
-All architecture, documentation, and project setup completed before writing code.
+Architecture designed, repository structured, and documentation written before any code.
 
 ---
 
-## 🔥 Phase 1 — AI Core Foundation ✅ Complete (v0.1.0)
+# 🔥 Phase 1 — AI Core Foundation ✅ Released (v0.1.0)
 
 **Released:** June 2026
 
-### Infrastructure
-
-* ✅ Spring Boot 4.0.6 + Spring AI 2.0 (M8)
-* ✅ PostgreSQL 16 + pgvector + Flyway migrations
-* ✅ Redis 7 for session caching
-* ✅ Docker Compose (one command setup)
-* ✅ Custom PostgreSQL image with pgvector
-
-### AI Engine
-
-* ✅ OllamaProvider (local AI, primary)
-* ✅ GeminiProvider (cloud AI, fallback)
-* ✅ ProviderRouter (automatic failover)
-* ✅ PromptAssembler (context builder)
-* ✅ WorkingMemoryBuilder (date/time/user)
-* ✅ SSE token streaming
-
-### Security
-
-* ✅ JWT authentication (15min access + 7day refresh)
-* ✅ Argon2id password hashing
-* ✅ Role-based access (ADMIN / USER)
-* ✅ Spring Security 7 reactive filter chain
-
-### CLI (Spring Shell 4.0)
-
-* ✅ Custom `jarvis:>` prompt
+* ✅ Spring Boot 4 + Spring AI 2.0 (M8)
+* ✅ Ollama (local) + Gemini (cloud fallback)
+* ✅ Provider abstraction (`AiProvider` interface)
+* ✅ SSE token streaming (WebFlux)
+* ✅ JWT authentication (Argon2id)
+* ✅ PostgreSQL + Flyway (8 migrations)
+* ✅ Spring Shell 4 CLI (`jarvis:>` prompt)
+* ✅ Custom JLine terminal (backspace, history)
+* ✅ Session management + message persistence
+* ✅ Working memory (date/time/user injection)
+* ✅ Redis session caching
 * ✅ First-run setup wizard
-* ✅ login / logout / whoami / setup
-* ✅ Interactive streaming chat
-* ✅ Session management commands
-* ✅ status / doctor / jarvis-version / about
-* ✅ Backspace + history (JLine)
+* ✅ Swagger UI + health indicators
+* ✅ GitHub Actions CI
+* ✅ Dependabot + CodeRabbit
 
-### Database (V1-V9)
+---
 
-* ✅ users table
-* ✅ ai_providers table
-* ✅ chat_sessions table
-* ✅ messages table
-* ✅ system_prompts table
-* ✅ conversation_summaries table
-* ✅ refresh_tokens table
-* ✅ seed data (Ollama + Gemini providers)
-* ✅ memories table (V9)
+# 🧠 Phase 2 — Memory System 🔨 Core Complete
 
-### Phase 2 Infrastructure (completed in Phase 1)
+**Target:** `v0.2.0`
 
+## Infrastructure ✅
+
+* ✅ Redis 7 (session caching ~1ms vs ~50ms DB)
+* ✅ pgvector 0.7.4 (custom Docker build)
+* ✅ `memories` table (V9)
 * ✅ pgvector extension (V10)
 * ✅ embedding column on memories (V11)
-* ✅ Redis session cache (SessionCacheService)
-* ✅ EmbeddingService (nomic-embed-text)
 
----
+## Core Memory Pipeline ✅
 
-## 🧠 Phase 2 — Memory System 🔨 In Progress (v0.2.0)
+* ✅ Memory entity + `MemoryType` enum
+* ✅ `MemoryRepository` (R2DBC)
+* ✅ `MemoryEmbeddingRepository` (JDBC/pgvector)
+* ✅ `MemoryService` (CRUD + semantic search)
+* ✅ `EmbeddingService` (`nomic-embed-text`)
+* ✅ `MemoryExtractionService` (async AI extraction)
+* ✅ `PromptAssembler` updated (memory injection)
+* ✅ `AiOrchestrator` (parallel load via `Mono.zip`)
+* ✅ Prompt injection security (sanitization)
 
-**Goal:** Jarvis remembers you across all sessions.
+## Contributor Tasks 📋
 
-### Infrastructure ✅ Complete
-
-* ✅ memories table with pgvector column
-* ✅ pgvector 0.7.4 in Docker
-* ✅ EmbeddingService (Ollama nomic-embed-text)
-* ✅ Redis session caching
-
-### Core Memory 🔨 In Progress
-
-* 🔨 Memory entity + MemoryRepository
-* 📋 MemoryService (CRUD operations)
-* 📋 Memory REST API endpoints
-
-### Memory Intelligence 📋 Planned
-
-* 📋 Automatic extraction from conversations
-* 📋 Memory injection into prompts
-* 📋 pgvector semantic search
+* 📋 Memory REST API (`GET`, `POST`, `DELETE /api/v1/memories`)
+* 📋 CLI memory commands (`memory list`, `memory add`, `memory delete`, `memory clear`)
 * 📋 Conversation summarization
-
-### User Interface 📋 Planned
-
-* 📋 CLI memory commands
+* 📋 Unit tests for `MemoryExtractionService`
+* 📋 HNSW index for memories (Phase 2.5)
 
 ---
 
-## 📚 Phase 3 — RAG Engine 📋 Planned (v0.3.0)
+# 📚 Phase 3 — RAG Engine 🔨 In Progress
 
+**Target:** `v0.3.0`
 **Goal:** Chat with your own documents.
 
-* 📋 PDF, TXT, Markdown upload
-* 📋 Smart chunking (300-500 tokens)
-* 📋 pgvector document storage
-* 📋 Semantic search on documents
-* 📋 Source citation in responses
-* 📋 CLI document commands
-* 📋 curl installer for easier setup
+## Foundation 🔨
+
+* ✅ `documents` table (V12)
+* ✅ `document_chunks` table with pgvector (V13)
+* ✅ `Document` entity + `DocumentChunk` entity
+* ✅ `DocumentRepository` + `DocumentChunkRepository`
+* 🔨 `DocumentProcessingService` (chunking)
+* 🔨 `DocumentEmbeddingService` (embed chunks)
+* 🔨 `RagSearchService` (pgvector chunk search)
+* 🔨 `PromptAssembler` updated (inject chunks)
+
+## Contributor Tasks 📋
+
+* 📋 REST API: `POST /api/v1/documents` (upload)
+* 📋 REST API: `GET /api/v1/documents` (list)
+* 📋 REST API: `DELETE /api/v1/documents/{id}`
+* 📋 CLI: `doc upload`, `doc list`, `doc delete`
+* 📋 PDF text extraction (`Apache PDFBox`)
+* 📋 Markdown parsing
+* 📋 Tests
 
 ---
 
-## 🔧 Phase 4 — Tool Engine 📋 Planned (v0.4.0)
+# 🔧 Phase 4 — Tool Engine 📋 Planned (`v0.4.0`)
 
-**Goal:** Jarvis takes real actions.
-
-* 📋 @Tool annotation framework
-* 📋 DateTimeTool, CalculatorTool
-* 📋 WeatherTool (OpenWeatherMap)
-* 📋 WebSearchTool (DuckDuckGo)
-* 📋 MCP Server (@EnableMcpServer)
+* 📋 `@Tool` annotation framework (Spring AI)
+* 📋 `DateTimeTool`
+* 📋 `CalculatorTool`
+* 📋 `WeatherTool` (OpenWeatherMap Free API)
+* 📋 `WebSearchTool` (DuckDuckGo)
+* 📋 MCP Server (`@EnableMcpServer`)
+* 📋 MCP Client connections
 
 ---
 
-## 🎙️ Phase 5 — Voice Assistant 📋 Planned (v0.5.0)
+# 🎙️ Phase 5 — Voice 📋 Planned (`v0.5.0`)
 
-**Goal:** Talk to Jarvis, hear Jarvis respond.
-
-* 📋 Browser speech-to-text
-* 📋 Local Whisper (Ollama)
+* 📋 Browser speech-to-text (Web Speech API)
+* 📋 Local Whisper (via Ollama)
 * 📋 Text-to-speech output
 * 📋 Voice conversation loop
+* 📋 Wake-word detection
 
 ---
 
-## 🤖 Phase 6 — Agent System 📋 Planned (v0.6.0)
+# 🤖 Phase 6 — Agents 📋 Planned (`v0.6.0`)
 
-**Goal:** Jarvis plans and executes multi-step tasks.
-
-* 📋 ReACT pattern
-* 📋 AgentPlanner + AgentExecutor
+* 📋 ReACT pattern (`Reason → Act → Observe`)
+* 📋 `AgentPlanner` + `AgentExecutor`
 * 📋 Multi-step workflow persistence
 * 📋 Multi-agent collaboration
 
 ---
 
-## 🌐 Phase 7 — Web UI 💭 Considering (v1.0.0)
+# 🌐 Phase 7 — Web UI 💭 Considering (`v1.0.0`)
 
 * 💭 Angular 21 + Angular Material
-* 💭 Real-time streaming chat UI
-* 💭 Session management
-* 💭 Document upload (RAG)
+* 💭 Real-time streaming chat
+* 💭 Document upload UI
+* 💭 Memory management panel
 * 💭 Agent dashboard
 
 ---
 
-## 🤝 How To Help
+# ❌ What We Will NOT Build
 
-| Area                       | Phase   | Skill          |
-| -------------------------- | ------- | -------------- |
-| Memory entity + repository | Phase 2 | Java, R2DBC    |
-| MemoryService CRUD         | Phase 2 | Java, Spring   |
-| Memory REST API            | Phase 2 | Spring WebFlux |
-| Memory CLI commands        | Phase 2 | Spring Shell   |
-| Unit tests                 | All     | JUnit 5        |
-| Documentation              | All     | Writing        |
-| Architecture diagrams      | All     | Draw.io        |
+| Won't Build                | Why                            |
+| -------------------------- | ------------------------------ |
+| Cloud SaaS product         | Jarvis is self-hosted          |
+| Our own LLM                | We orchestrate existing models |
+| Central telemetry          | No data collection             |
+| Microservices from day one | Monolith first                 |
+
+---
+
+# 🗓️ Timeline
+
+| Version  | Target                        |
+| -------- | ----------------------------- |
+| `v0.1.0` | ✅ Released — June 2026        |
+| `v0.2.0` | Q3 2026 — Memory System       |
+| `v0.3.0` | Q3 2026 — RAG Engine          |
+| `v0.4.0` | Q4 2026 — Tool Engine         |
+| `v0.5.0` | Q1 2027 — Voice Assistant     |
+| `v0.6.0` | Q2 2027 — Agents              |
+| `v1.0.0` | 2028 — Web UI + Full Platform |
+
+---
+
+# 🤝 How To Help
+
+| Area                       | Phase   | Skill Required    |
+| -------------------------- | ------- | ----------------- |
+| Memory REST API            | Phase 2 | Spring WebFlux    |
+| CLI memory commands        | Phase 2 | Spring Shell 4    |
+| Conversation summarization | Phase 2 | Spring AI         |
+| Document upload API        | Phase 3 | Spring WebFlux    |
+| PDF text extraction        | Phase 3 | Apache PDFBox     |
+| CLI document commands      | Phase 3 | Spring Shell 4    |
+| Unit tests                 | All     | JUnit 5           |
+| Architecture diagrams      | All     | draw.io           |
+| Documentation              | All     | Technical Writing |
 
 ---
 

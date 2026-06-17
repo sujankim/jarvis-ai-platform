@@ -123,82 +123,77 @@ No coding experience required.
 
 # 💻 Development Setup
 
-## Requirements
+## 📋 Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Java | 21+ | [adoptium.net](https://adoptium.net/) |
-| Docker | Latest | [docker.com](https://docker.com/) |
-| Ollama | Latest | [ollama.ai](https://ollama.ai/) |
-| Git | Latest | [git-scm.com](https://git-scm.com/) |
+| Tool   | Version | Install                               |
+| ------ | ------- | ------------------------------------- |
+| Java   | 21+     | [adoptium.net](https://adoptium.net/) |
+| Docker | Latest  | [docker.com](https://docker.com/)     |
+| Ollama | Latest  | [ollama.ai](https://ollama.ai/)       |
+| Git    | Latest  | [git-scm.com](https://git-scm.com/)   |
+
 ---
 
----
-
-## Pull Required Ollama Models
+## 🤖 Pull Required Models
 
 ```bash
 # Chat model (required)
 ollama pull llama3.1:8b
 
-# Embedding model (required for Phase 2)
+# Embedding model (required for Phase 2+)
 ollama pull nomic-embed-text
 ```
 
 ---
 
-### 1. Fork and Clone
+## 🚀 Setup Steps
+
+### 1️⃣ Fork and Clone
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/jarvis-ai-platform.git
-
 cd jarvis-ai-platform
 ```
 
-### 2. Add Upstream Remote
-
-```bash
-git remote add upstream https://github.com/sujankim/jarvis-ai-platform.git
-```
-
-### 3. Configure Environment
+### 2️⃣ Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Update `.env`:
+Set `JARVIS_JWT_SECRET` to any **32+ character secret string**.
+
+Example:
 
 ```env
-JARVIS_JWT_SECRET=your-secret-key-with-32-characters-minimum
+JARVIS_JWT_SECRET=your-super-secret-key-with-at-least-32-characters
 ```
 
-### 4. Start Infrastructure
+### 3️⃣ Start Infrastructure
+
+> **Note:** Uses a custom PostgreSQL image with pgvector preinstalled.
 
 ```bash
-# PostgreSQL + Redis
-docker compose up -d
+docker-compose up -d
 ```
 
-> Note: The main Docker Compose setup includes PostgreSQL with pgvector and Redis.
-
-### 5. Run Jarvis Backend
+### 4️⃣ Run Jarvis
 
 ```bash
 cd server
-
 ./mvnw spring-boot:run
 ```
 
-### 6. First-Time Setup
+### 5️⃣ First-Time Setup
 
 ```text
 jarvis:> setup
 jarvis:> login
+jarvis:> chat
 ```
----
 
-## 7. Verify Setup
+
+## 6. Verify Setup
 
 You should see:
 
