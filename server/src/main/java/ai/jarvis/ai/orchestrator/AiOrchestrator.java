@@ -9,6 +9,7 @@ import ai.jarvis.chat.session.ChatSessionRepository;
 import ai.jarvis.memory.MemoryExtractionService;
 import ai.jarvis.memory.MemoryService;
 import ai.jarvis.memory.session.SessionMemoryService;
+import ai.jarvis.rag.RagSearchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -24,10 +25,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Core AI orchestration service.
  *
- * PHASE 2 ADDITION:
- * Now loads long-term memories before building prompt.
- * Memory loading runs IN PARALLEL with session history
- * loading for performance (no extra latency).
+ * PHASE 3 ADDITION:
+ * Now loads RAG document context IN PARALLEL with
+ * session history and long-term memories.
+ * Zero extra latency — all 3 load simultaneously.
+ *
+ * CONTEXT LOADING (all parallel via Mono.zip):
+ * 1. Session history  (Redis cache ~1ms)
+ * 2. Memory context   (pgvector ~20ms)
+ * 3. RAG context      (pgvector ~20ms) ← NEW Phase 3
  */
 @Slf4j
 @Service
@@ -40,9 +46,10 @@ public class AiOrchestrator {
     private final PromptAssembler promptAssembler;
     private final WorkingMemoryBuilder workingMemoryBuilder;
     private final SessionMemoryService sessionMemoryService;
-    private final MemoryService memoryService;           // NEW
+    private final MemoryService memoryService;
     private final MemoryExtractionService
-            memoryExtractionService;                      // EXISTING
+            memoryExtractionService;
+    private final RagSearchService ragSearchService; // ← NEW
 
     public Flux<String> chat(OrchestratorRequest request) {
 
@@ -57,36 +64,51 @@ public class AiOrchestrator {
 
         return r2dbcEntityTemplate
                 .insert(userMsg)
-                // Load session history AND memories IN PARALLEL
-                // Mono.zip runs both simultaneously
-                // Result: no extra latency for memory loading!
+                // Load ALL context IN PARALLEL
+                // Mono.zip runs all 3 simultaneously
+                // Total time = slowest of 3, not sum!
                 .then(
                         Mono.zip(
-                                // Left: session history
-                                sessionMemoryService.loadHistory(
-                                        request.sessionId()),
-                                // Right: formatted memory context
-                                // Empty string if no userId or no memories
-                                loadMemoryContext(request.userId(), request.message())
+                                // 1. Session history (Redis)
+                                sessionMemoryService
+                                        .loadHistory(
+                                                request.sessionId()),
+                                // 2. Memory context (pgvector)
+                                loadMemoryContext(
+                                        request.userId(),
+                                        request.message()),
+                                // 3. RAG context (pgvector) ← NEW
+                                loadRagContext(
+                                        request.userId(),
+                                        request.message())
                         )
                 )
                 .flatMap(tuple -> {
-                    List<Message> history = tuple.getT1();
-                    String memoryContext = tuple.getT2();
+                    List<Message> history =
+                            tuple.getT1();
+                    String memoryContext =
+                            tuple.getT2();
+                    String ragContext =
+                            tuple.getT3(); // ← NEW
 
                     return providerRouter.route()
                             .map(provider ->
                                     new ProviderAndContext(
                                             provider,
                                             history,
-                                            memoryContext));
+                                            memoryContext,
+                                            ragContext)); // ← NEW
                 })
                 .flatMapMany(pac -> {
 
-                    AiProvider provider = pac.provider();
-                    List<Message> history = pac.history();
+                    AiProvider provider =
+                            pac.provider();
+                    List<Message> history =
+                            pac.history();
                     String memoryContext =
                             pac.memoryContext();
+                    String ragContext =
+                            pac.ragContext(); // ← NEW
 
                     String workingMemory =
                             workingMemoryBuilder.build(
@@ -97,21 +119,20 @@ public class AiOrchestrator {
                                     provider.getModelName()
                             );
 
-                    // Filter out current user message
-                    // from history (just inserted above)
                     List<Message> historyWithoutCurrent =
                             history.stream()
                                     .filter(msg -> !msg.id()
                                             .equals(userMsgId))
                                     .toList();
 
-                    // Build prompt WITH memory context
+                    // Build prompt with ALL context
                     Prompt prompt = promptAssembler.assemble(
                             request.message(),
                             workingMemory,
                             historyWithoutCurrent,
                             request.username(),
-                            memoryContext  // ← NEW
+                            memoryContext,
+                            ragContext  // ← NEW Phase 3
                     );
 
                     StringBuilder responseBuilder =
@@ -120,15 +141,22 @@ public class AiOrchestrator {
                             new AtomicInteger(0);
 
                     log.info(
-                            "AI request: user={} session={} "
-                                    + "provider={} model={} "
-                                    + "history={} memories={}",
+                            "AI request: user={} "
+                                    + "session={} "
+                                    + "provider={} "
+                                    + "model={} "
+                                    + "history={} "
+                                    + "memories={} "
+                                    + "rag={}",
                             request.username(),
                             request.sessionId(),
                             provider.getName(),
                             provider.getModelName(),
                             historyWithoutCurrent.size(),
-                            memoryContext.isBlank() ? 0 : 1
+                            memoryContext.isBlank()
+                                    ? 0 : 1,
+                            ragContext.isBlank()
+                                    ? 0 : 1  // ← NEW
                     );
 
                     return provider.streamChat(prompt)
@@ -144,7 +172,8 @@ public class AiOrchestrator {
                                                 - startTime;
 
                                 log.info(
-                                        "AI response: user={} "
+                                        "AI response: "
+                                                + "user={} "
                                                 + "tokens≈{} "
                                                 + "duration={}ms "
                                                 + "provider={}",
@@ -184,13 +213,11 @@ public class AiOrchestrator {
                             });
                 })
                 .doFinally(signal -> {
-                    // Cache refresh after exchange
                     sessionMemoryService
                             .onMessageSaved(
                                     request.sessionId())
                             .subscribe();
 
-                    // Memory extraction (async)
                     if (request.userId() != null) {
                         memoryExtractionService
                                 .extractAndSave(
@@ -211,20 +238,34 @@ public class AiOrchestrator {
     // ── Private Helpers ───────────────────────────
 
     /**
-     * Load formatted memory context for prompt.
+     * Load RAG context for prompt injection.
      *
-     * WHY Mono<String> not Flux<Memory>:
+     * WHY Mono<String> not Flux<RagSearchResult>:
      * PromptAssembler needs a ready-to-inject String.
-     * MemoryService.formatForPrompt() does this.
+     * RagSearchService.formatForPrompt() handles this.
      *
      * WHY handle null userId:
-     * Some code paths may not have userId yet.
-     * Gracefully return empty string in that case.
-     * Chat still works — just without memories.
+     * Same as memory — some paths may not have userId.
+     * Return empty string gracefully.
      *
-     * @param userId owner of the memories
-     * @return formatted memory string or empty string
+     * @param userId    owner of the documents
+     * @param userQuery current user message
+     * @return formatted RAG string or empty string
      */
+    private Mono<String> loadRagContext(
+            UUID userId,
+            String userQuery) {
+
+        if (userId == null) {
+            return Mono.just("");
+        }
+
+        return ragSearchService
+                .formatForPrompt(userId, userQuery)
+                .onErrorReturn("")
+                .defaultIfEmpty("");
+    }
+
     private Mono<String> loadMemoryContext(
             UUID userId,
             String userQuery) {
@@ -296,5 +337,6 @@ public class AiOrchestrator {
     private record ProviderAndContext(
             AiProvider provider,
             List<Message> history,
-            String memoryContext) {}
+            String memoryContext,
+            String ragContext) {} // ← added ragContext
 }
