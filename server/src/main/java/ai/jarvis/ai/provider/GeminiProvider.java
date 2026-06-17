@@ -1,50 +1,89 @@
 package ai.jarvis.ai.provider;
 
+import com.google.genai.Client;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.google.genai.GoogleGenAiChatModel;
+import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * Gemini provider using ChatClient.Builder.
- * Only activated when GEMINI_API_KEY is set.
+ * Gemini AI provider — cloud fallback.
  *
- * ChatClient.Builder is always available from
- * Spring AI regardless of which model is active.
- * It automatically uses whichever ChatModel
- * Spring Boot auto-configured.
+ * ACTIVATION FIX (CodeRabbit Issue #2):
+ * @ConditionalOnProperty allows blank string values —
+ * the property EXISTS even when GEMINI_API_KEY is empty.
+ * This prevented GeminiUnavailableProvider from creating.
+ *
+ * @ConditionalOnExpression uses StringUtils.hasText()
+ * which returns FALSE for null, empty, AND blank strings.
+ * This correctly activates only when key has real content.
+ *
+ * SECURITY FIX (CodeRabbit Issue #3):
+ * Removed debug log that leaked API key prefix/length.
+ * Never log credential fragments — use generic message.
  */
 @Slf4j
 @Component
+@ConditionalOnExpression(
+        "T(org.springframework.util.StringUtils)"
+                + ".hasText('${spring.ai.google.genai"
+                + ".api-key:}')"
+)
 public class GeminiProvider implements AiProvider {
 
     private final String apiKey;
     private final String modelName;
-    private ChatClient chatClient;
+    private final ChatClient chatClient;
 
     public GeminiProvider(
-            ChatClient.Builder builder,
-            @Value("${spring.ai.google.api-key:}")
+            @Value("${spring.ai.google.genai.api-key:}")
             String apiKey,
-            @Value("${spring.ai.google.chat.model:"
+            @Value("${spring.ai.google.genai.chat.model:"
                     + "gemini-2.0-flash}")
             String modelName) {
 
         this.apiKey = apiKey;
         this.modelName = modelName;
 
-        // Only build client if key is configured
         if (apiKey != null && !apiKey.isBlank()) {
-            this.chatClient = builder.build();
-            log.info("GeminiProvider initialized: "
-                    + "model={}", modelName);
+
+            Client genAiClient = Client.builder()
+                    .apiKey(apiKey)
+                    .build();
+
+            GoogleGenAiChatModel chatModel =
+                    GoogleGenAiChatModel.builder()
+                            .genAiClient(genAiClient)
+                            .defaultOptions(
+                                    GoogleGenAiChatOptions
+                                            .builder()
+                                            .model(modelName)
+                                            .temperature(0.7)
+                                            .maxOutputTokens(2048)
+                                            .build()
+                            )
+                            .build();
+
+            this.chatClient = ChatClient
+                    .builder(chatModel)
+                    .build();
+
+            // FIX: Generic message — never log key content
+            // CodeRabbit Issue #3: remove prefix/length log
+            log.info(
+                    "GeminiProvider initialized: model={}",
+                    modelName);
+
         } else {
             this.chatClient = null;
-            log.debug("GeminiProvider: "
-                    + "no API key configured");
+            log.debug(
+                    "GeminiProvider: no API key configured");
         }
     }
 
@@ -53,22 +92,20 @@ public class GeminiProvider implements AiProvider {
         if (chatClient == null) {
             return Flux.error(new RuntimeException(
                     "Gemini API key not configured. "
-                            + "Add GEMINI_API_KEY to .env"));
+                            + "Set GEMINI_API_KEY in environment."));
         }
         return chatClient
                 .prompt(prompt)
                 .stream()
-                .content()
-                .filter(t -> t != null
-                        && !t.isEmpty());
+                .content();
     }
 
     @Override
     public Mono<Boolean> isAvailable() {
-        boolean available = apiKey != null
+        boolean hasKey = apiKey != null
                 && !apiKey.isBlank()
                 && chatClient != null;
-        return Mono.just(available);
+        return Mono.just(hasKey);
     }
 
     @Override
