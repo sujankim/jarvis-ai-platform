@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Component
@@ -118,15 +120,22 @@ public class CliHttpClient {
 
     // ── Streaming (for chat) ──────────────────────
 
+    public record StreamStats(
+            int tokens,
+            long durationMs
+    ) {}
+
     public void streamChat(
             String token,
             Object body,
             java.util.function.Consumer<String> onSession,
             java.util.function.Consumer<String> onToken,
-            Runnable onDone,
+            java.util.function.Consumer<StreamStats> onDone,
             java.util.function.Consumer<String> onError) {
 
         try {
+            long startedAtNanos = System.nanoTime();
+            AtomicInteger tokenCount = new AtomicInteger();
             var webClient = org.springframework.web
                     .reactive.function.client
                     .WebClient.builder()
@@ -161,10 +170,16 @@ public class CliHttpClient {
                             String tokenText =
                                     parseJsonToken(event.data());
                             if (tokenText != null) {
+                                tokenCount.incrementAndGet();
                                 onToken.accept(tokenText);
                             }
                         } else if ("done".equals(eventType)) {
-                            onDone.run();
+                            long durationMs = TimeUnit.NANOSECONDS
+                                    .toMillis(System.nanoTime()
+                                            - startedAtNanos);
+                            onDone.accept(new StreamStats(
+                                    tokenCount.get(),
+                                    durationMs));
                         }
                     })
                     .doOnError(err ->
