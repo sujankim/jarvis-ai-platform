@@ -171,6 +171,27 @@ public class SystemCommands {
     }
 
     @Command(
+            name = "examples",
+            description = "Show common Jarvis CLI usage examples"
+    )
+    public String examples() {
+        return "\n"
+                + "QUICK START:\n"
+                + "  login               Sign in to Jarvis\n"
+                + "  chat                Start chatting with AI\n"
+                + "  ask -m \"question\"   Quick single question\n\n"
+                + "SESSION MANAGEMENT:\n"
+                + "  session             List all conversations\n"
+                + "  switch-session -n 2 Switch to session #2\n"
+                + "  new-session         Start fresh session\n\n"
+                + "SYSTEM:\n"
+                + "  status              Check all services\n"
+                + "  doctor              Full health diagnostics\n"
+                + "  jarvis-version      Version information\n"
+                + "  about               About Jarvis\n";
+    }
+
+    @Command(
             name = "about",
             description = "Show Jarvis platform information"
     )
