@@ -1,5 +1,6 @@
 package ai.jarvis.ai.provider;
 
+import ai.jarvis.tools.ToolRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -12,6 +13,14 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 
+/**
+ * Ollama AI provider — local primary provider.
+ *
+ * PHASE 4 UPDATE:
+ * Now accepts ToolRegistry for tool-aware streaming.
+ * When tools are registered, ChatClient includes them
+ * in the request so the model can call them.
+ */
 @Slf4j
 @Component
 public class OllamaProvider implements AiProvider {
@@ -20,36 +29,59 @@ public class OllamaProvider implements AiProvider {
     private final WebClient webClient;
     private final String modelName;
     private final String baseUrl;
+    private final ToolRegistry toolRegistry;
 
     public OllamaProvider(
             OllamaChatModel ollamaChatModel,
             WebClient.Builder webClientBuilder,
+            ToolRegistry toolRegistry,
             @Value("${spring.ai.ollama.chat.model:"
                     + "llama3.1:8b}") String modelName,
             @Value("${spring.ai.ollama.base-url:"
                     + "http://localhost:11434}")
             String baseUrl) {
 
+        this.toolRegistry = toolRegistry;
+        this.modelName = modelName;
+        this.baseUrl = baseUrl;
+
         this.chatClient = ChatClient
                 .builder(ollamaChatModel)
                 .build();
+
         this.webClient = webClientBuilder
                 .baseUrl(baseUrl)
                 .build();
-        this.modelName = modelName;
-        this.baseUrl = baseUrl;
-        log.info("OllamaProvider initialized: "
-                + "model={} url={}", modelName, baseUrl);
+
+        log.info(
+                "OllamaProvider initialized: "
+                        + "model={} url={} tools={}",
+                modelName, baseUrl,
+                toolRegistry.count());
     }
 
     @Override
     public Flux<String> streamChat(Prompt prompt) {
+        // PHASE 4: Register tools if available
+        if (toolRegistry.hasTools()) {
+            return chatClient
+                    .prompt(prompt)
+                    .tools(toolRegistry.asArray())
+                    .stream()
+                    .content()
+                    .filter(token ->
+                            token != null
+                                    && !token.isEmpty());
+        }
+
+        // No tools — standard streaming
         return chatClient
                 .prompt(prompt)
                 .stream()
                 .content()
                 .filter(token ->
-                        token != null && !token.isEmpty());
+                        token != null
+                                && !token.isEmpty());
     }
 
     @Override
