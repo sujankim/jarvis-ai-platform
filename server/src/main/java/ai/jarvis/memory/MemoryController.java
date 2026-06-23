@@ -33,7 +33,7 @@ import reactor.core.publisher.Mono;
 @Slf4j
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/memory")
+@RequestMapping("/api/v1/memories")
 @SecurityRequirement(name = "Bearer Auth")
 @Tag(name = "Memory", description = "Memory management")
 public class MemoryController {

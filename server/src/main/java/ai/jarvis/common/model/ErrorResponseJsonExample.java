@@ -12,7 +12,7 @@ public class ErrorResponseJsonExample {
                 "details": [
                     "must not be blank"
                 ],
-                "path": "/api/v1/memory",
+                "path": "/api/v1/memories",
                 "timestamp": "2026-06-01T10:05:01.123456Z"
             }
             """;
@@ -21,7 +21,7 @@ public class ErrorResponseJsonExample {
             {
                 "errorCode": "BAD_REQUEST",
                 "message": "Type mismatch.",
-                "path": "/api/v1/memory/12345",
+                "path": "/api/v1/memories/12345",
                 "timestamp": "2026-06-01T10:05:01.123456Z"
             }
             """;
@@ -30,7 +30,7 @@ public class ErrorResponseJsonExample {
             {
                 "errorCode": "NOT_FOUND",
                 "message": "Memory not found",
-                "path": "/api/v1/memory/5eff485b-1ca6-4d4f-b94c-c30c010de82b",
+                "path": "/api/v1/memories/5eff485b-1ca6-4d4f-b94c-c30c010de82b",
                 "timestamp": "2026-06-01T10:05:01.123456Z"
             }
             """;

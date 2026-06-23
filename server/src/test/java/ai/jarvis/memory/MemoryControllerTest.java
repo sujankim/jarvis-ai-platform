@@ -59,7 +59,7 @@ class MemoryControllerTest {
     private MemoryMapper memoryMapper;
 
     @Test
-    @DisplayName("Test GET /api/v1/memory - Should return empty list when no memories found")
+    @DisplayName("Test GET /api/v1/memories - Should return empty list when no memories found")
     void testListMemories_ShouldReturnEmptyListWhenNoMemoriesFound() {
         // Given
         when(this.memoryService.getAll(USER_ID)).thenReturn(Flux.empty());
@@ -67,7 +67,7 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .get()
-                .uri("/api/v1/memory")
+                .uri("/api/v1/memories")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
@@ -75,7 +75,7 @@ class MemoryControllerTest {
     }
 
     @Test
-    @DisplayName("Test GET /api/v1/memory - Should return user's memories")
+    @DisplayName("Test GET /api/v1/memories - Should return user's memories")
     void testListMemories_ShouldReturnMemoriesForUser() {
         // Given
         Memory firstMemory = mock(Memory.class);
@@ -92,7 +92,7 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .get()
-                .uri("/api/v1/memory")
+                .uri("/api/v1/memories")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
@@ -116,7 +116,7 @@ class MemoryControllerTest {
     }
 
     @Test
-    @DisplayName("Test GET /api/v1/memory/count - Should return memory count")
+    @DisplayName("Test GET /api/v1/memories/count - Should return memory count")
     void testCount_ShouldReturnCount() {
         // Given
         long count = 10;
@@ -125,7 +125,7 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .get()
-                .uri("/api/v1/memory/count")
+                .uri("/api/v1/memories/count")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
@@ -133,7 +133,7 @@ class MemoryControllerTest {
     }
 
     @Test
-    @DisplayName("Test POST /api/v1/memory - Should save memory")
+    @DisplayName("Test POST /api/v1/memories - Should save memory")
     void testCreate_ShouldSaveMemory() {
         // Given
         String memoryContent = "Memory content";
@@ -149,7 +149,7 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .post()
-                .uri("/api/v1/memory")
+                .uri("/api/v1/memories")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(memoryRequestJson)
                 .exchange()
@@ -174,12 +174,12 @@ class MemoryControllerTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("provideInvalidMemoryType")
-    @DisplayName("Test POST /api/v1/memory - Should return bad request for null memory type")
+    @DisplayName("Test POST /api/v1/memories - Should return bad request for null memory type")
     void testCreate_ShouldReturnBadResponseWhenMemoryTypeIsNull(String testName, String memoryRequestJson) {
         // When + Then
         this.webTestClient
                 .post()
-                .uri("/api/v1/memory")
+                .uri("/api/v1/memories")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(memoryRequestJson)
                 .exchange()
@@ -196,12 +196,12 @@ class MemoryControllerTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("provideInvalidContent")
-    @DisplayName("Test POST /api/v1/memory - Should return bad request for blank memory content")
+    @DisplayName("Test POST /api/v1/memories - Should return bad request for blank memory content")
     void testCreate_ShouldReturnBadResponseWhenContentIsBlank(String testName, String memoryRequestWithInvalidContent) {
         // When + Then
         this.webTestClient
                 .post()
-                .uri("/api/v1/memory")
+                .uri("/api/v1/memories")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(memoryRequestWithInvalidContent)
                 .exchange()
@@ -209,7 +209,7 @@ class MemoryControllerTest {
     }
 
     @Test
-    @DisplayName("Test DELTE /api/v1/memory/{memoryId} - Should delete memory by id")
+    @DisplayName("Test DELTE /api/v1/memories/{memoryId} - Should delete memory by id")
     void testDeleteById_ShouldDeleteMemoryById() {
         // Given
         String memoryIdRaw = "5eff485b-1ca6-4d4f-b94c-c30c010de82b";
@@ -220,13 +220,13 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .delete()
-                .uri("/api/v1/memory/{memoryId}", memoryId)
+                .uri("/api/v1/memories/{memoryId}", memoryId)
                 .exchange()
                 .expectStatus().isNoContent();
     }
 
     @Test
-    @DisplayName("Test DELTE /api/v1/memory/{memoryId} - Should return bad request when invalid memory id provided")
+    @DisplayName("Test DELTE /api/v1/memories/{memoryId} - Should return bad request when invalid memory id provided")
     void testDeleteById_ShouldReturnBadRequestWhenInvalidIdProvided() {
         // Given
         String invalidMemoryId = "invalid id";
@@ -234,13 +234,13 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .delete()
-                .uri("/api/v1/memory/{memoryId}", invalidMemoryId)
+                .uri("/api/v1/memories/{memoryId}", invalidMemoryId)
                 .exchange()
                 .expectStatus().isBadRequest();
     }
 
     @Test
-    @DisplayName("Test DELTE /api/v1/memory/{memoryId} - Should return not found when memory was not found by id")
+    @DisplayName("Test DELTE /api/v1/memories/{memoryId} - Should return not found when memory was not found by id")
     void testDeleteById_ShouldReturnNotFoundWhenMemoryIdNotFound() {
         // Given
         String memoryIdRaw = "5eff485b-1ca6-4d4f-b94c-c30c010de82b";
@@ -252,13 +252,13 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .delete()
-                .uri("/api/v1/memory/{memoryId}", memoryId)
+                .uri("/api/v1/memories/{memoryId}", memoryId)
                 .exchange()
                 .expectStatus().isNotFound();
     }
 
     @Test
-    @DisplayName("Test DELTE /api/v1/memory - Should delete all memories")
+    @DisplayName("Test DELTE /api/v1/memories - Should delete all memories")
     void testDeleteAll_ShouldDeleteAllMemories() {
         // Given
         when(this.memoryService.deleteAll(USER_ID)).thenReturn(Mono.empty());
@@ -266,7 +266,7 @@ class MemoryControllerTest {
         // When + Then
         this.webTestClient
                 .delete()
-                .uri("/api/v1/memory")
+                .uri("/api/v1/memories")
                 .exchange()
                 .expectStatus().isNoContent();
     }
