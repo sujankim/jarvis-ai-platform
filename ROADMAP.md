@@ -1,11 +1,11 @@
 # 🗺️ Jarvis AI Platform — Roadmap
 
 > **Last Updated:** June 2026
-> **Current Status:** Phase 3 — In Progress 🔨
+> **Current Status:** Phase 5 — In Progress 🔨
 
 ---
 
-# 📊 Status Legend
+## 📊 Status Legend
 
 | Symbol | Meaning        |
 | ------ | -------------- |
@@ -17,13 +17,14 @@
 
 ---
 
-# 🏗️ Phase 0 — Foundation ✅ Complete
+## 🏗️ Phase 0 — Foundation ✅ Complete
 
-Architecture designed, repository structured, and documentation written before any code.
+Architecture designed, repository structured,
+and documentation written before any code.
 
 ---
 
-# 🔥 Phase 1 — AI Core Foundation ✅ Released (v0.1.0)
+## 🔥 Phase 1 — AI Core Foundation ✅ Released (v0.1.0)
 
 **Released:** June 2026
 
@@ -32,9 +33,9 @@ Architecture designed, repository structured, and documentation written before a
 * ✅ Provider abstraction (`AiProvider` interface)
 * ✅ SSE token streaming (WebFlux)
 * ✅ JWT authentication (Argon2id)
-* ✅ PostgreSQL + Flyway (8 migrations)
+* ✅ PostgreSQL + Flyway (V1–V8)
 * ✅ Spring Shell 4 CLI (`jarvis:>` prompt)
-* ✅ Custom JLine terminal (backspace, history)
+* ✅ Custom JLine terminal
 * ✅ Session management + message persistence
 * ✅ Working memory (date/time/user injection)
 * ✅ Redis session caching
@@ -43,13 +44,20 @@ Architecture designed, repository structured, and documentation written before a
 * ✅ GitHub Actions CI
 * ✅ Dependabot + CodeRabbit
 
+### Contributor Tasks
+* 📋 Token count display after response — #3
+* 📋 Examples command — #4
+* 📋 Docker image + publish workflow — #6
+* 📋 OpenRouter as third provider — #7
+* 📋 Rate limiting implementation — #11
+
 ---
 
-# 🧠 Phase 2 — Memory System ✅ Core Complete
+## 🧠 Phase 2 — Memory System ✅ Core Complete
 
-**Released:** v0.2.0 core — June 2026
+**Target:** `v0.2.0`
 
-## Core ✅
+### Core ✅ Complete
 * ✅ Redis 7 session caching (~1ms vs ~50ms DB)
 * ✅ pgvector 0.7.4 embeddings
 * ✅ `memories` table (V9) + embedding column (V11)
@@ -62,20 +70,20 @@ Architecture designed, repository structured, and documentation written before a
 * ✅ `MemoryExtractionService` (async AI extraction)
 * ✅ `PromptAssembler` updated (memory injection)
 * ✅ `AiOrchestrator` (parallel load via `Mono.zip`)
+* ✅ Memory REST API (`GET`, `POST`, `DELETE`) — #35
 
-## Contributor Tasks 📋
-* 📋 Memory REST API (`GET`, `POST`, `DELETE`) — #35
+### Contributor Tasks 📋
 * 📋 CLI memory commands — #34
-* 📋 Conversation summarization — #37
+* 📋 Conversation summarization — #8 / #37
 
 ---
 
-# 📚 Phase 3 — RAG Engine ✅ Core Complete
+## 📚 Phase 3 — RAG Engine ✅ Core Complete
 
-**Released:** v0.3.0 core — June 2026
+**Target:** `v0.3.0`
 
-## Core ✅
-* ✅ `documents` table (V13)
+### Core ✅ Complete
+* ✅ `documents` table (V13) + composite FK
 * ✅ `document_chunks` + pgvector + HNSW index (V14)
 * ✅ `Document` + `DocumentChunk` entities
 * ✅ `TextExtractor` interface (Strategy Pattern)
@@ -87,7 +95,7 @@ Architecture designed, repository structured, and documentation written before a
 * ✅ `PromptAssembler` updated (RAG injection step 4)
 * ✅ `AiOrchestrator` (3-way parallel `Mono.zip`)
 
-## Contributor Tasks 📋
+### Contributor Tasks 📋
 * 📋 Document REST API
 * 📋 CLI document commands
 * 📋 PDF text extraction (PDFBox)
@@ -95,84 +103,110 @@ Architecture designed, repository structured, and documentation written before a
 
 ---
 
-# 🔧 Phase 4 — Tool Engine 📋 Next (v0.4.0)
+## 🔧 Phase 4 — Tool Engine ✅ Core Complete
 
-* 📋 `@Tool` annotation framework (Spring AI)
-* 📋 `DateTimeTool`
-* 📋 `CalculatorTool`
-* 📋 `WeatherTool` (OpenWeatherMap Free API)
-* 📋 `WebSearchTool` (DuckDuckGo)
-* 📋 MCP Server (`@EnableMcpServer`)
-* 📋 MCP Client connections
+**Released:** v0.4.0 core — June 2026
+
+### Core ✅ Complete
+* ✅ `JarvisTool` marker interface (Strategy Pattern)
+* ✅ `ToolRegistry` (auto-discovers all JarvisTool beans)
+* ✅ `DateTimeTool` (current time, timezone queries)
+* ✅ `CalculatorTool` (math expression evaluation)
+* ✅ `WeatherTool` (OpenWeatherMap free tier)
+* ✅ `WebSearchTool` (DuckDuckGo, no API key)
+* ✅ `OllamaProvider` updated (tools support)
+* ✅ `GeminiProvider` updated (tools support)
+* ✅ `McpServerConfig` (expose tools via MCP protocol)
+* ✅ Package structure: `tools/builtin/` + `tools/mcp/`
+
+### Contributor Tasks 📋
+* 📋 CLI tool commands (`tools`, `tool-test`)
+* 📋 Tool integration tests
+* 📋 WeatherTool + WebSearchTool mock HTTP tests
+* 📋 OpenRouter as third provider — #7
+
 ---
 
-# 🎙️ Phase 5 — Voice 📋 Planned (`v0.5.0`)
+## 🎙️ Phase 5 — Voice Assistant 🔨 In Progress
 
-* 📋 Browser speech-to-text (Web Speech API)
-* 📋 Local Whisper (via Ollama)
-* 📋 Text-to-speech output
-* 📋 Voice conversation loop
-* 📋 Wake-word detection
+**Target:** `v0.5.0`
+
+### Core (Maintainer Builds)
+* 🔨 `WhisperTranscriptionService` (Ollama whisper)
+* 🔨 `TextToSpeechService` (local TTS)
+* 🔨 `VoiceConversationService` (full loop)
+* 🔨 `VoiceSession` entity + table (V15)
+* 📋 `AiOrchestrator` updated (voice mode)
+* 📋 `VoiceController` (core REST endpoints)
+
+### Contributor Tasks 📋
+* 📋 CLI voice commands (`voice`, `listen`, `speak`)
+* 📋 Voice REST API endpoints
+* 📋 Tests
 
 ---
 
-# 🤖 Phase 6 — Agents 📋 Planned (`v0.6.0`)
+## 🤖 Phase 6 — Agents 📋 Planned (`v0.6.0`)
 
 * 📋 ReACT pattern (`Reason → Act → Observe`)
 * 📋 `AgentPlanner` + `AgentExecutor`
 * 📋 Multi-step workflow persistence
 * 📋 Multi-agent collaboration
+* 📋 Agents use Phase 4 tools natively
 
 ---
 
-# 🌐 Phase 7 — Web UI 💭 Considering (`v1.0.0`)
+## 🌐 Phase 7 — Web UI 💭 Considering (`v1.0.0`)
 
 * 💭 Angular 21 + Angular Material
 * 💭 Real-time streaming chat
 * 💭 Document upload UI
 * 💭 Memory management panel
 * 💭 Agent dashboard
+* 💭 Voice interface in browser
 
 ---
 
-# ❌ What We Will NOT Build
+## ❌ What We Will NOT Build
 
 | Won't Build                | Why                            |
 | -------------------------- | ------------------------------ |
-| Cloud SaaS product         | Jarvis is self-hosted          |
+| Cloud SaaS product         | Jarvis is self-hosted only     |
 | Our own LLM                | We orchestrate existing models |
-| Central telemetry          | No data collection             |
-| Microservices from day one | Monolith first                 |
+| Central telemetry          | No data collection ever        |
+| Microservices from day one | Monolith-first architecture    |
 
 ---
 
-# 🗓️ Timeline
+## 🗓️ Timeline
 
-| Version  | Target                        |
-| -------- | ----------------------------- |
-| `v0.1.0` | ✅ Released — June 2026        |
-| `v0.2.0` | Q3 2026 — Memory System       |
-| `v0.3.0` | Q3 2026 — RAG Engine          |
-| `v0.4.0` | Q4 2026 — Tool Engine         |
-| `v0.5.0` | Q1 2027 — Voice Assistant     |
-| `v0.6.0` | Q2 2027 — Agents              |
-| `v1.0.0` | 2028 — Web UI + Full Platform |
+| Version  | Target                          |
+| -------- | ------------------------------- |
+| `v0.1.0` | ✅ Released — June 2026          |
+| `v0.2.0` | Core ✅ — Q3 2026                |
+| `v0.3.0` | Core ✅ — Q3 2026                |
+| `v0.4.0` | Core ✅ — June 2026              |
+| `v0.5.0` | Q3 2026 — Voice Assistant       |
+| `v0.6.0` | Q4 2026 — Agents                |
+| `v1.0.0` | 2027 — Web UI + Full Platform   |
 
 ---
 
-# 🤝 How To Help
+## 🤝 How To Help
 
-| Area                       | Phase   | Skill Required    |
-| -------------------------- | ------- | ----------------- |
-| Memory REST API            | Phase 2 | Spring WebFlux    |
-| CLI memory commands        | Phase 2 | Spring Shell 4    |
-| Conversation summarization | Phase 2 | Spring AI         |
-| Document upload API        | Phase 3 | Spring WebFlux    |
-| PDF text extraction        | Phase 3 | Apache PDFBox     |
-| CLI document commands      | Phase 3 | Spring Shell 4    |
-| Unit tests                 | All     | JUnit 5           |
-| Architecture diagrams      | All     | draw.io           |
-| Documentation              | All     | Technical Writing |
+| Area                      | Phase   | Skill Required    |
+| ------------------------- | ------- | ----------------- |
+| CLI tool commands         | Phase 4 | Spring Shell 4    |
+| Tool integration tests    | Phase 4 | JUnit 5           |
+| OpenRouter provider       | Phase 4 | Spring AI         |
+| CLI memory commands       | Phase 2 | Spring Shell 4    |
+| Document REST API         | Phase 3 | Spring WebFlux    |
+| CLI document commands     | Phase 3 | Spring Shell 4    |
+| PDF text extraction       | Phase 3 | Apache PDFBox     |
+| CLI voice commands        | Phase 5 | Spring Shell 4    |
+| Voice REST API            | Phase 5 | Spring WebFlux    |
+| Architecture diagrams     | All     | draw.io           |
+| Documentation             | All     | Technical Writing |
 
 ---
 
