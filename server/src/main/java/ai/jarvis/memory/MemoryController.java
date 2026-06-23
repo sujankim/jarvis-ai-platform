@@ -77,7 +77,6 @@ public class MemoryController {
     public Mono<ApiResponse<MemoryCountResponse>> count(@Parameter(hidden = true) Mono<Authentication> authenticationMono) {
         return getUserId(authenticationMono)
                 .flatMap(this.memoryService::count)
-                .doOnNext(count -> log.info("Memory count: {}", count))
                 .map(MemoryCountResponse::new)
                 .map(ApiResponse::ok);
     }
@@ -169,7 +168,6 @@ public class MemoryController {
         return authenticationMono
                 .map(Authentication::getPrincipal)
                 .cast(String.class)
-                .doOnNext(str -> log.info("Str: {}", str))
                 .map(UUID::fromString);
     }
 }
