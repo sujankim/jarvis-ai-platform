@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -97,6 +98,12 @@ public class ChatSessionController {
                 .map(SecurityContext::getAuthentication)
                 .map(Authentication::getPrincipal)
                 .cast(String.class)
-                .map(UUID::fromString);
+                .map(UUID::fromString)
+                .onErrorMap(
+                        IllegalArgumentException.class,
+                        ex -> new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "Invalid token subject",
+                                ex));
     }
 }

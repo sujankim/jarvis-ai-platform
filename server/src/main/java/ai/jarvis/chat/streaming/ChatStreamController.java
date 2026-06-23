@@ -11,12 +11,14 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -47,65 +49,72 @@ public class ChatStreamController {
     public Flux<ServerSentEvent<String>> stream(
             @Valid @RequestBody ChatRequest request) {
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .flatMapMany(auth -> {
+        return getUserId()
+                .flatMapMany(userId -> {
 
-                    String userId = auth.getPrincipal()
-                            .toString();
-                    String username =
-                            extractUsername(auth);
+                    return ReactiveSecurityContextHolder
+                            .getContext()
+                            .map(SecurityContext
+                                    ::getAuthentication)
+                            .flatMapMany(auth -> {
 
-                    return resolveSession(
-                            request.sessionId(),
-                            UUID.fromString(userId),
-                            request.message()
-                    )
-                            .flatMapMany(session -> {
+                                String username =
+                                        extractUsername(auth);
 
-                                log.info(
-                                        "Chat: user={} session={}",
-                                        username, session.id());
+                                return resolveSession(
+                                        request.sessionId(),
+                                        userId,
+                                        request.message()
+                                )
+                                        .flatMapMany(session -> {
 
-                                OrchestratorRequest orchRequest =
-                                        OrchestratorRequest.of(
-                                                session.id(),
-                                                request.message(),
-                                                username,
-                                                extractRole(auth),
-                                                UUID.fromString(userId)
-                                        );
+                                            log.info(
+                                                    "Chat: user={} "
+                                                            + "session={}",
+                                                    username,
+                                                    session.id());
 
-                                return orchestrator
-                                        .chat(orchRequest)
-                                        .map(token ->
-                                                ServerSentEvent
-                                                        .<String>builder()
-                                                        .event("token")
-                                                        .data(jsonToken(token))
-                                                        .build()
-                                        )
-                                        // Send session ID FIRST
-                                        // CLI stores this for
-                                        // next message continuity
-                                        .startWith(
-                                                ServerSentEvent
-                                                        .<String>builder()
-                                                        .event("session")
-                                                        .data(session.id()
-                                                                .toString())
-                                                        .build()
-                                        )
-                                        .concatWith(Flux.just(
-                                                ServerSentEvent
-                                                        .<String>builder()
-                                                        .event("done")
-                                                        .data("[DONE]")
-                                                        .build()
-                                        ));
+                                            OrchestratorRequest
+                                                    orchRequest =
+                                                    OrchestratorRequest
+                                                            .of(
+                                                                    session.id(),
+                                                                    request.message(),
+                                                                    username,
+                                                                    extractRole(auth),
+                                                                    userId
+                                                            );
+
+                                            return orchestrator
+                                                    .chat(orchRequest)
+                                                    .map(token ->
+                                                            ServerSentEvent
+                                                                    .<String>builder()
+                                                                    .event("token")
+                                                                    .data(jsonToken(token))
+                                                                    .build()
+                                                    )
+                                                    .startWith(
+                                                            ServerSentEvent
+                                                                    .<String>builder()
+                                                                    .event("session")
+                                                                    .data(session.id()
+                                                                            .toString())
+                                                                    .build()
+                                                    )
+                                                    .concatWith(Flux.just(
+                                                            ServerSentEvent
+                                                                    .<String>builder()
+                                                                    .event("done")
+                                                                    .data("[DONE]")
+                                                                    .build()
+                                                    ));
+                                        });
                             });
                 });
     }
+
+    // ── Private Helpers ───────────────────────────
 
     private String jsonToken(String token) {
         return "{\"t\":\""
@@ -130,6 +139,20 @@ public class ChatStreamController {
                 .map(a -> a.getAuthority()
                         .replace("ROLE_", ""))
                 .orElse("USER");
+    }
+
+    private Mono<UUID> getUserId() {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getPrincipal)
+                .cast(String.class)
+                .map(UUID::fromString)
+                .onErrorMap(
+                        IllegalArgumentException.class,
+                        ex -> new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "Invalid token subject",
+                                ex));
     }
 
     private Mono<ChatSession> resolveSession(
@@ -158,7 +181,8 @@ public class ChatStreamController {
                 .insert(newSession)
                 .flatMap(saved ->
                         sessionRepository
-                                .setTitleIfNull(saved.id(), title)
+                                .setTitleIfNull(
+                                        saved.id(), title)
                                 .thenReturn(saved)
                 );
     }
