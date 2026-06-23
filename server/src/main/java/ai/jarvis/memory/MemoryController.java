@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import ai.jarvis.common.model.ApiResponse;
 import ai.jarvis.common.model.ErrorResponse;
-import ai.jarvis.common.model.ErrorResponseJsonExample;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -95,7 +94,7 @@ public class MemoryController {
                     description = "Memory request body is invalid",
                     content = @Content(
                             schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ErrorResponseJsonExample.VALIDATION_ERROR_BLANK_STRING_EXAMPLE)
+                            examples = @ExampleObject(MemoryErrorResponseJsonExample.VALIDATION_ERROR_BLANK_STRING_EXAMPLE)
                     )
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -108,7 +107,7 @@ public class MemoryController {
                     description = "Memory with the specified content already exists",
                     content = @Content(
                             schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ErrorResponseJsonExample.CONFLICTING_MEMORY)
+                            examples = @ExampleObject(MemoryErrorResponseJsonExample.CONFLICTING_MEMORY)
                     )
             )
     })
@@ -133,7 +132,7 @@ public class MemoryController {
                     description = "Invalid memory id",
                     content = @Content(
                             schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ErrorResponseJsonExample.VALIDATION_ERROR_INVALID_MEMORY_ID)
+                            examples = @ExampleObject(MemoryErrorResponseJsonExample.VALIDATION_ERROR_INVALID_MEMORY_ID)
                     )
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -146,7 +145,7 @@ public class MemoryController {
                     description = "Memory was not found by given id",
                     content = @Content(
                             schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ErrorResponseJsonExample.NOT_FOUND_BY_MEMORY_ID)
+                            examples = @ExampleObject(MemoryErrorResponseJsonExample.NOT_FOUND_BY_MEMORY_ID)
                     )
             )
     })

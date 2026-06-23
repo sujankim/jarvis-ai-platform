@@ -1,9 +1,9 @@
-package ai.jarvis.common.model;
+package ai.jarvis.memory;
 
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
-public class ErrorResponseJsonExample {
+public class MemoryErrorResponseJsonExample {
 
     public static final String VALIDATION_ERROR_BLANK_STRING_EXAMPLE = """
             {
