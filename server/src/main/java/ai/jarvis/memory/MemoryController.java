@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 @Slf4j
@@ -37,6 +38,8 @@ import reactor.core.publisher.Mono;
 @SecurityRequirement(name = "Bearer Auth")
 @Tag(name = "Memory", description = "Memory management")
 public class MemoryController {
+
+    public static final String CONFLICT_MESSAGE = "Memory with the specified content already exists";
 
     private final MemoryService memoryService;
     private final MemoryMapper memoryMapper;
@@ -99,6 +102,14 @@ public class MemoryController {
                     responseCode = "401",
                     description = "Invalid or no token provided",
                     content = @Content(schema = @Schema(hidden = true))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "Memory with the specified content already exists",
+                    content = @Content(
+                            schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(ErrorResponseJsonExample.CONFLICTING_MEMORY)
+                    )
             )
     })
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
@@ -107,6 +118,7 @@ public class MemoryController {
         return getUserId(authenticationMono)
                 .flatMap(userId -> this.memoryService.saveManual(userId, memoryRequest))
                 .map(this.memoryMapper::toResponse)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.CONFLICT, CONFLICT_MESSAGE)))
                 .map(ApiResponse::ok);
     }
 

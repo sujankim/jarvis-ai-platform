@@ -165,6 +165,26 @@ class MemoryControllerTest {
                 .jsonPath("$.data.createdAt").isEqualTo(ISO_INSTANT.format(memoryResponse.createdAt()));
     }
 
+    @Test
+    @DisplayName("Test POST /api/v1/memories - Should return conflict when saving memory with already existing content")
+    void testCreate_ShouldSendConflictWhenSavingAlreadyExistingMemoryContent() {
+        // Given
+        String memoryContent = "Memory content";
+        MemoryRequest memoryRequest = new MemoryRequest(MemoryType.FACT, memoryContent);
+        String memoryRequestJson = createMemoryRequestJson(MemoryType.FACT, memoryContent);
+
+        when(this.memoryService.saveManual(USER_ID, memoryRequest)).thenReturn(Mono.empty());
+
+        // When + Then
+        this.webTestClient
+                .post()
+                .uri("/api/v1/memories")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(memoryRequestJson)
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.CONFLICT);
+    }
+
     private static Stream<Arguments> provideInvalidMemoryType() {
         return Stream.of(
                 Arguments.of("Should return bad request for null memory type", MEMORY_REQUEST_WITH_NULL_MEMORY_TYPE),

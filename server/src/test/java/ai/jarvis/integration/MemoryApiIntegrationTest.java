@@ -31,6 +31,7 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -289,6 +290,27 @@ class MemoryApiIntegrationTest {
         assertNull(memoryFromDb.lastAccessed());
         assertNotNull(memoryFromDb.createdAt());
         assertNotNull(memoryFromDb.updatedAt());
+    }
+
+    @Test
+    @DisplayName("Test POST /api/v1/memories - Should return conflict when saving memory with already existing content")
+    void testCreate_ShouldSendConflictWhenSavingAlreadyExistingMemoryContent() {
+        // Given
+        String memoryContent = "Memory content";
+        String memoryRequestJson = createMemoryRequestJson(MemoryType.FACT, memoryContent);
+
+        Memory savedMemory = Memory.create(USER_ID, MemoryType.FACT, memoryContent, null);
+        Objects.requireNonNull(this.r2dbcEntityTemplate.insert(savedMemory).block());
+
+        // When + Then
+        this.webTestClient
+                .post()
+                .uri("/api/v1/memories")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, this.authHeaderValue)
+                .bodyValue(memoryRequestJson)
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.CONFLICT);
     }
 
     @Test

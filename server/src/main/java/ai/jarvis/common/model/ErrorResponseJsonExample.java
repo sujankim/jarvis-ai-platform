@@ -34,4 +34,13 @@ public class ErrorResponseJsonExample {
                 "timestamp": "2026-06-01T10:05:01.123456Z"
             }
             """;
+
+    public static final String CONFLICTING_MEMORY = """
+            {
+                "errorCode": "CONFLICT",
+                "message": "Memory with the specified content already exists",
+                "path": "/api/v1/memories",
+                "timestamp": "2026-06-01T10:05:01.123456Z"
+            }
+            """;
 }
