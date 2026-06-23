@@ -344,6 +344,12 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- TC 2.0 uses testcontainers- prefix -->
         <dependency>
             <groupId>org.testcontainers</groupId>
