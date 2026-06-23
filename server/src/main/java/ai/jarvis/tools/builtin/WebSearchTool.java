@@ -310,7 +310,7 @@ public class WebSearchTool implements JarvisTool {
      * AbstractURL also has consecutive capitals (URL)
      * which Jackson maps to abstractURL not abstractUrl.
      */
-    private record SearchResponse(
+     record SearchResponse(
             @JsonProperty("Answer")
             String answer,
             @JsonProperty("AbstractText")
@@ -327,7 +327,7 @@ public class WebSearchTool implements JarvisTool {
      * DuckDuckGo returns Text and FirstURL (PascalCase).
      * FirstURL has consecutive capitals causing extra issue.
      */
-    private record RelatedTopic(
+     record RelatedTopic(
             @JsonProperty("Text")
             String text,
             @JsonProperty("FirstURL")
