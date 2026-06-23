@@ -1,4 +1,4 @@
-package ai.jarvis.tools;
+package ai.jarvis.tools.builtin;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

@@ -1,5 +1,6 @@
-package ai.jarvis.tools;
+package ai.jarvis.tools.builtin;
 
+import ai.jarvis.tools.JarvisTool;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;

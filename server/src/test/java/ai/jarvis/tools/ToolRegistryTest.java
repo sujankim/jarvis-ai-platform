@@ -1,5 +1,7 @@
 package ai.jarvis.tools;
 
+import ai.jarvis.tools.builtin.CalculatorTool;
+import ai.jarvis.tools.builtin.DateTimeTool;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

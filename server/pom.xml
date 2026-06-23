@@ -369,6 +369,18 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- ========================= -->
+        <!-- MCP Server (Phase 4)      -->
+        <!-- ========================= -->
+
+        <!-- Spring AI MCP Server -->
+        <!-- Exposes Jarvis tools via Model Context Protocol -->
+        <!-- External clients: Claude Desktop, VS Code AI etc. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webflux</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
