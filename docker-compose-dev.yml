@@ -4,13 +4,13 @@
 # Spring Boot runs directly for fast restart
 #
 # Usage:
-#   docker-compose -f docker-compose.dev.yml up -d
+#   docker-compose -f docker-compose-dev.yml up -d
 # ═══════════════════════════════════════════════════
 
 services:
 
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: jarvis-postgres-dev
     environment:
       POSTGRES_DB: jarvis

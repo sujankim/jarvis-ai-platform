@@ -12,17 +12,13 @@
 services:
 
   postgres:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.postgres
-    image: jarvis-postgres-pgvector:local
+    image: pgvector/pgvector:pg16
     container_name: jarvis-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: jarvis
       POSTGRES_USER: jarvis
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jarvis}
-      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5433:5432"
     volumes:
