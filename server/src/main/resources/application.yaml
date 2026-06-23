@@ -152,6 +152,19 @@ jarvis:
     log-provider-selection: true
     performance-summary-interval: 5m
 
+    # ── Tool Engine (Phase 4) ──────────────────────
+    tools:
+      weather:
+        # Get free key at: https://openweathermap.org/
+        # 1000 calls/day free tier
+        # Leave empty to disable weather tool
+        api-key: ${OPENWEATHER_API_KEY:}
+
+      web-search:
+        # DuckDuckGo — no API key needed
+        enabled: true
+        max-results: 3
+
 # ═══════════════════════════════════════════════════
 # ACTUATOR
 # ═══════════════════════════════════════════════════

@@ -40,3 +40,5 @@ logs/
 # ── OS files ─────────────────────────────
 .DS_Store
 desktop.ini.jarvis-history
+.jarvis-history
+*.jarvis-history
