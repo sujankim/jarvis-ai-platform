@@ -179,6 +179,8 @@ public class MemoryController {
         return authenticationMono
                 .map(Authentication::getPrincipal)
                 .cast(String.class)
-                .map(UUID::fromString);
+                .map(UUID::fromString)
+                .onErrorMap(IllegalArgumentException.class,
+                        ex -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid token subject", ex));
     }
 }
