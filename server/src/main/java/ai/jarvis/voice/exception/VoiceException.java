@@ -6,16 +6,15 @@ import org.springframework.http.HttpStatus;
 /**
  * Exception for voice-related errors.
  *
- * Covers:
- * - Whisper model not installed
- * - Transcription failures
- * - TTS failures
- * - Unsupported audio format
+ * FIX (CodeRabbit):
+ * whisperNotAvailable() message updated.
+ * Old: "Run: ollama pull whisper" — WRONG
+ *      Ollama does not support Whisper natively.
+ * New: Points to correct backends (Groq or whisper.cpp)
  */
 public class VoiceException extends JarvisException {
 
-    public VoiceException(
-            String message) {
+    public VoiceException(String message) {
         super(
                 "VOICE_ERROR",
                 message,
@@ -31,11 +30,20 @@ public class VoiceException extends JarvisException {
 
     // ── Factory methods ───────────────────────────
 
+    /**
+     * FIX: Message now points to correct backends.
+     * Ollama does NOT support Whisper.
+     * Use Groq API or local whisper.cpp server.
+     */
     public static VoiceException whisperNotAvailable() {
         return new VoiceException(
                 "WHISPER_NOT_AVAILABLE",
-                "Whisper model not available. "
-                        + "Run: ollama pull whisper",
+                "Whisper transcription not available. "
+                        + "Set GROQ_API_KEY for cloud "
+                        + "transcription, or start a "
+                        + "local whisper.cpp server. "
+                        + "See: github.com/ggerganov"
+                        + "/whisper.cpp",
                 HttpStatus.SERVICE_UNAVAILABLE);
     }
 

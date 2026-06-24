@@ -12,46 +12,49 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
+
 /**
  * Transcribes audio to text using Whisper.
  *
- * IMPORTANT: Ollama does NOT support Whisper natively.
- * `ollama pull whisper` → "file does not exist"
+ * Ollama does NOT support Whisper natively.
+ * Use one of two modes:
  *
- * TWO MODES depending on configuration:
+ * MODE 1 — Groq API (cloud, free tier):
+ *   Set GROQ_API_KEY in .env
+ *   Free: 6000 requests/day
+ *   URL: api.groq.com/openai/v1
  *
- * MODE 1: Groq API (cloud, free tier)
- *   Set: GROQ_API_KEY in .env
- *   Free: 6000 requests/day on whisper-large-v3-turbo
- *   URL: api.groq.com/openai/v1/audio/transcriptions
- *   WHY: Zero local setup, fastest, OpenAI-compatible API
+ * MODE 2 — Local whisper.cpp server:
+ *   No API key required
+ *   URL: http://localhost:8178
+ *   Setup: github.com/ggerganov/whisper.cpp
  *
- * MODE 2: Local whisper.cpp server
- *   Setup: whisper.cpp running on port 8178
- *   URL: http://localhost:8178/inference
- *   WHY: 100% local, no API key, full privacy
- *   Docs: github.com/ggerganov/whisper.cpp#http-server
  *
- * SPRING AI INTEGRATION:
- * Spring AI AudioTranscriptionModel uses OpenAI API format.
- * Both Groq + whisper.cpp speak OpenAI-compatible format.
- * We call via WebClient for direct control.
- *
- * INPUT:  byte[] audio (wav/mp3/webm/ogg/m4a)
- * OUTPUT: Mono<String> transcribed text
+ * 1. Added timeouts: 30s transcription, 5s health check
+ * 2. Local mode works without API key
+ *    isLocalMode=true when URL contains localhost
+ * 3. Separate code paths for local vs cloud
+ *    No incompatible WebClient type casting
  */
 @Slf4j
 @Service
 public class WhisperTranscriptionService {
 
-    // OpenAI-compatible transcription endpoint
     private static final String TRANSCRIPTION_PATH =
             "/audio/transcriptions";
+
+    private static final Duration TRANSCRIPTION_TIMEOUT =
+            Duration.ofSeconds(30);
+
+    private static final Duration HEALTH_TIMEOUT =
+            Duration.ofSeconds(5);
 
     private final WebClient webClient;
     private final String apiKey;
     private final String model;
     private final boolean isGroq;
+    private final boolean isLocalMode;
 
     public WhisperTranscriptionService(
             WebClient.Builder webClientBuilder,
@@ -67,33 +70,31 @@ public class WhisperTranscriptionService {
         this.apiKey = apiKey;
         this.model = model;
         this.isGroq = baseUrl.contains("groq.com");
+        this.isLocalMode =
+                baseUrl.contains("localhost")
+                        || baseUrl.contains("127.0.0.1");
 
         this.webClient = webClientBuilder
                 .baseUrl(baseUrl)
                 .build();
 
-        if (apiKey != null && !apiKey.isBlank()) {
+        if (isConfigured()) {
             log.info(
                     "WhisperTranscriptionService: "
                             + "mode={} model={}",
-                    isGroq ? "groq-cloud"
-                            : "local-server",
-                    model);
+                    getMode(), model);
         } else {
             log.warn(
                     "WhisperTranscriptionService: "
-                            + "no API key configured. "
-                            + "Set GROQ_API_KEY in .env "
-                            + "OR point to local "
+                            + "not configured. "
+                            + "Set GROQ_API_KEY for cloud "
+                            + "or configure local "
                             + "whisper.cpp server.");
         }
     }
 
     /**
      * Transcribe audio bytes to text.
-     *
-     * Uses OpenAI-compatible multipart API.
-     * Works with: Groq API + whisper.cpp server.
      *
      * @param audioBytes raw audio file bytes
      * @return Mono<String> transcribed text
@@ -124,9 +125,9 @@ public class WhisperTranscriptionService {
                     new VoiceException(
                             "WHISPER_NOT_CONFIGURED",
                             "Whisper not configured. "
-                                    + "Set GROQ_API_KEY in .env "
-                                    + "for cloud transcription, "
-                                    + "or set up local "
+                                    + "Set GROQ_API_KEY "
+                                    + "in .env for cloud, "
+                                    + "or start local "
                                     + "whisper.cpp server.",
                             org.springframework.http
                                     .HttpStatus
@@ -162,45 +163,85 @@ public class WhisperTranscriptionService {
     /**
      * Check if Whisper is configured and reachable.
      *
-     * @return true if ready to transcribe
+     * Separate code paths for local vs cloud.
+     * No type casting between incompatible WebClient
+     * spec types (RequestHeadersSpec vs RequestBodySpec).
+     *
+     * @return Mono<Boolean> true if ready to transcribe
      */
     public Mono<Boolean> isAvailable() {
         if (!isConfigured()) {
             return Mono.just(false);
         }
 
-        // Quick health check
+        // FIX: Separate paths — no variable reassignment
+        // Local mode: no Authorization header needed
+        // Cloud mode: Bearer token required
+        if (isLocalMode) {
+            return webClient
+                    .get()
+                    .uri("/models")
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(HEALTH_TIMEOUT)
+                    .map(response -> true)
+                    .onErrorReturn(false);
+        }
+
         return webClient
                 .get()
                 .uri("/models")
-                .header("Authorization",
+                .header(
+                        "Authorization",
                         "Bearer " + apiKey)
                 .retrieve()
                 .bodyToMono(String.class)
+                .timeout(HEALTH_TIMEOUT)
                 .map(response -> true)
                 .onErrorReturn(false);
     }
 
     /**
-     * Get current mode name.
-     * Used for health checks + logging.
+     * Get current mode name for health checks + logs.
+     *
+     * @return mode identifier string
      */
     public String getMode() {
         if (!isConfigured()) {
             return "not-configured";
         }
-        return isGroq ? "groq-cloud" : "local-whisper";
+        if (isLocalMode) {
+            return "local-whisper";
+        }
+        return isGroq ? "groq-cloud" : "remote-whisper";
     }
 
     // ── Private Helpers ───────────────────────────
 
+    /**
+     * Local mode: no key needed (whisper.cpp).
+     * Cloud mode: key required (Groq or OpenAI).
+     *
+     * @return true if ready to make API calls
+     */
     private boolean isConfigured() {
+        if (isLocalMode) {
+            return true;
+        }
         return apiKey != null && !apiKey.isBlank();
     }
 
     /**
-     * Call Whisper API via OpenAI-compatible multipart.
-     * Works with Groq API + whisper.cpp server.
+     * Call Whisper via OpenAI-compatible multipart API.
+     * Works with Groq API and whisper.cpp server.
+     *
+     * Separate code paths for local vs cloud.
+     * Added TRANSCRIPTION_TIMEOUT before .block()
+     *      to prevent thread starvation.
+     *
+     * @param audioBytes raw audio bytes
+     * @param language   optional language hint (nullable)
+     * @return transcribed text string
      */
     private String callWhisperApi(
             byte[] audioBytes,
@@ -209,7 +250,6 @@ public class WhisperTranscriptionService {
         MultipartBodyBuilder bodyBuilder =
                 new MultipartBodyBuilder();
 
-        // Audio file as multipart
         bodyBuilder.part("file",
                 new ByteArrayResource(audioBytes) {
                     @Override
@@ -226,24 +266,46 @@ public class WhisperTranscriptionService {
             bodyBuilder.part("language", language);
         }
 
-        String response = webClient
-                .post()
-                .uri(TRANSCRIPTION_PATH)
-                .header("Authorization",
-                        "Bearer " + apiKey)
-                .contentType(
-                        MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData(
-                        bodyBuilder.build()))
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
+        // FIX: Separate paths — no incompatible casting
+        // Local whisper.cpp: no auth header
+        // Cloud (Groq): Bearer token required
+        Mono<String> responseMono;
+
+        if (isLocalMode) {
+            responseMono = webClient
+                    .post()
+                    .uri(TRANSCRIPTION_PATH)
+                    .contentType(
+                            MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters
+                            .fromMultipartData(
+                                    bodyBuilder.build()))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(TRANSCRIPTION_TIMEOUT);
+        } else {
+            responseMono = webClient
+                    .post()
+                    .uri(TRANSCRIPTION_PATH)
+                    .header(
+                            "Authorization",
+                            "Bearer " + apiKey)
+                    .contentType(
+                            MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters
+                            .fromMultipartData(
+                                    bodyBuilder.build()))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(TRANSCRIPTION_TIMEOUT);
+        }
+
+        String response = responseMono.block();
 
         if (response == null
                 || response.isBlank()) {
             throw new RuntimeException(
-                    "Empty response from "
-                            + "Whisper API");
+                    "Empty response from Whisper");
         }
 
         return response.trim();

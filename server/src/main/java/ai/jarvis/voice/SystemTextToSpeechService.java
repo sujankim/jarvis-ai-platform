@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
@@ -13,24 +12,17 @@ import java.util.concurrent.TimeUnit;
 /**
  * Text-to-speech using OS native commands.
  *
- * CROSS-PLATFORM SUPPORT:
- * Windows → PowerShell + System.Speech.Synthesis
- *           Saves to temp .wav then reads bytes
+ * FIXES (CodeRabbit):
+ * 1. Process leak fix: destroyForcibly() on timeout
+ *    in ALL generate* methods (not just playText).
+ *    Previously generate* methods ignored waitFor
+ *    return value — timed-out processes leaked.
  *
- * macOS   → say -o output.aiff command
- *           Converts to wav if needed
- *
- * Linux   → espeak or festival
- *           espeak -w output.wav "text"
- *
- * WHY SYSTEM TTS:
- * → Zero extra dependencies
- * → Works immediately on any OS
- * → Good enough for Phase 5
- * → Interface allows easy upgrade later
- *
- * ALL METHODS run on boundedElastic thread pool
- * because ProcessBuilder is blocking I/O.
+ * 2. Linux file output fix: use text2wave
+ *    festival --tts is for PLAYBACK, not file output.
+ *    text2wave -o <file> correctly writes WAV.
+ *    Without this: generateLinuxAudio() produced
+ *    empty bytes on festival-only systems.
  */
 @Slf4j
 @Service
@@ -39,7 +31,6 @@ public class SystemTextToSpeechService
 
     private static final int TIMEOUT_SECONDS = 30;
 
-    // Detect OS once at startup
     private static final String OS =
             System.getProperty("os.name")
                     .toLowerCase();
@@ -107,7 +98,11 @@ public class SystemTextToSpeechService
                         return isCommandAvailable(
                                 "espeak", "--version")
                                 || isCommandAvailable(
-                                "festival", "--version");
+                                "text2wave",
+                                "--version")
+                                || isCommandAvailable(
+                                "festival",
+                                "--version");
                     }
                     return false;
                 })
@@ -126,13 +121,6 @@ public class SystemTextToSpeechService
 
     // ── Private Helpers ───────────────────────────
 
-    /**
-     * Generate audio bytes from text.
-     * Writes to temp file, reads bytes back.
-     *
-     * @param text text to convert
-     * @return audio bytes (wav format)
-     */
     private byte[] generateAudio(String text)
             throws Exception {
 
@@ -142,8 +130,7 @@ public class SystemTextToSpeechService
 
         try {
             if (IS_WINDOWS) {
-                generateWindowsAudio(
-                        text, tempFile);
+                generateWindowsAudio(text, tempFile);
             } else if (IS_MAC) {
                 generateMacAudio(text, tempFile);
             } else if (IS_LINUX) {
@@ -168,16 +155,10 @@ public class SystemTextToSpeechService
         }
     }
 
-    /**
-     * Play text through system speakers.
-     * Does NOT generate file — plays directly.
-     */
     private void playText(String text)
             throws Exception {
 
-        // Sanitize text for shell injection safety
         String safe = sanitizeForShell(text);
-
         Process process;
 
         if (IS_WINDOWS) {
@@ -198,7 +179,6 @@ public class SystemTextToSpeechService
                     .start();
 
         } else if (IS_LINUX) {
-            // Try espeak first, fall back to festival
             if (isCommandAvailable(
                     "espeak", "--version")) {
                 process = new ProcessBuilder(
@@ -206,29 +186,32 @@ public class SystemTextToSpeechService
                         .start();
             } else {
                 process = new ProcessBuilder(
-                        "bash", "-c",
-                        "echo '" + safe
-                                + "' | festival --tts")
+                        "festival", "--tts")
                         .start();
+                // Write text to festival stdin
+                process.getOutputStream()
+                        .write(safe.getBytes());
+                process.getOutputStream().close();
             }
         } else {
             log.warn(
-                    "No TTS available for OS: {}",
-                    OS);
+                    "No TTS for OS: {}", OS);
             return;
         }
 
+        // FIX Issue 1: destroyForcibly on timeout
         boolean finished = process.waitFor(
                 TIMEOUT_SECONDS, TimeUnit.SECONDS);
         if (!finished) {
             process.destroyForcibly();
-            log.warn("TTS process timed out");
+            log.warn("TTS playback process timed out");
         }
     }
 
     /**
-     * Generate audio file on Windows.
-     * Uses PowerShell System.Speech to write WAV.
+     * FIX Issue 1: destroyForcibly on timeout.
+     * Previously: waitFor() return value ignored.
+     * Timed-out child processes leaked silently.
      */
     private void generateWindowsAudio(
             String text, File outputFile)
@@ -253,52 +236,80 @@ public class SystemTextToSpeechService
                         + "$s.SetOutputToDefaultAudioDevice()")
                 .start();
 
-        process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        // FIX Issue 1: check return + destroyForcibly
+        if (!process.waitFor(
+                TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            log.warn(
+                    "Windows TTS generation timed out");
+        }
     }
 
     /**
-     * Generate audio file on macOS.
-     * Uses built-in `say` command.
+     * FIX Issue 1: destroyForcibly on timeout.
+     * Applied to both say and afconvert processes.
      */
     private void generateMacAudio(
             String text, File outputFile)
             throws Exception {
 
-        // macOS say outputs AIFF — rename temp file
         File aiffFile = File.createTempFile(
                 "jarvis-tts-", ".aiff");
         aiffFile.deleteOnExit();
 
-        Process process = new ProcessBuilder(
-                "say",
-                "-o", aiffFile.getAbsolutePath(),
-                text)
-                .start();
+        try {
+            Process sayProcess =
+                    new ProcessBuilder(
+                            "say",
+                            "-o",
+                            aiffFile.getAbsolutePath(),
+                            text)
+                            .start();
 
-        process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-        // Convert AIFF to WAV via afconvert
-        if (aiffFile.exists()) {
-            Process convert = new ProcessBuilder(
-                    "afconvert",
-                    "-f", "WAVE",
-                    "-d", "LEI16",
-                    aiffFile.getAbsolutePath(),
-                    outputFile.getAbsolutePath())
-                    .start();
-            convert.waitFor(
+            // FIX Issue 1: destroyForcibly on timeout
+            if (!sayProcess.waitFor(
                     TIMEOUT_SECONDS,
-                    TimeUnit.SECONDS);
-        }
+                    TimeUnit.SECONDS)) {
+                sayProcess.destroyForcibly();
+                log.warn(
+                        "macOS say process timed out");
+                return;
+            }
 
-        aiffFile.delete();
+            if (aiffFile.exists()) {
+                Process convertProcess =
+                        new ProcessBuilder(
+                                "afconvert",
+                                "-f", "WAVE",
+                                "-d", "LEI16",
+                                aiffFile
+                                        .getAbsolutePath(),
+                                outputFile
+                                        .getAbsolutePath())
+                                .start();
+
+                // FIX Issue 1: destroyForcibly
+                if (!convertProcess.waitFor(
+                        TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS)) {
+                    convertProcess.destroyForcibly();
+                    log.warn(
+                            "afconvert timed out");
+                }
+            }
+
+        } finally {
+            aiffFile.delete();
+        }
     }
 
     /**
-     * Generate audio file on Linux.
-     * Uses espeak (preferred) or festival.
+     * FIX Issue 1: destroyForcibly on timeout.
+     * FIX Issue 2: Use text2wave for file output.
+     *
+     * festival --tts = PLAYBACK only, not file output.
+     * text2wave -o <file> = correct WAV file writer.
+     * espeak -w <file> = direct WAV writer (preferred).
      */
     private void generateLinuxAudio(
             String text, File outputFile)
@@ -308,33 +319,55 @@ public class SystemTextToSpeechService
 
         if (isCommandAvailable(
                 "espeak", "--version")) {
+            // espeak: writes WAV directly
             process = new ProcessBuilder(
                     "espeak",
-                    "-w", outputFile.getAbsolutePath(),
+                    "-w",
+                    outputFile.getAbsolutePath(),
                     text)
                     .start();
-        } else {
-            // festival outputs raw audio
+
+        } else if (isCommandAvailable(
+                "text2wave", "--version")) {
+            // FIX Issue 2: text2wave for WAV output
+            // text2wave = festival's WAV file writer
+            // festival --tts = playback only (WRONG)
             process = new ProcessBuilder(
                     "bash", "-c",
-                    "echo '" + sanitizeForShell(text)
-                            + "' | festival "
-                            + "--tts --output "
+                    "echo '"
+                            + sanitizeForShell(text)
+                            + "' | text2wave -o "
                             + outputFile
                             .getAbsolutePath())
                     .start();
+
+        } else {
+            // Last resort: festival scheme approach
+            // Uses Festival's Scheme interface
+            // to save WAV programmatically
+            process = new ProcessBuilder(
+                    "bash", "-c",
+                    "echo '(voice_kal_diphone) "
+                            + "(utt.save.wave "
+                            + "(SayText \""
+                            + sanitizeForShell(text)
+                            + "\") \""
+                            + outputFile
+                            .getAbsolutePath()
+                            + "\")' | festival")
+                    .start();
         }
 
-        process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        // FIX Issue 1: destroyForcibly on timeout
+        if (!process.waitFor(
+                TIMEOUT_SECONDS,
+                TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            log.warn(
+                    "Linux TTS generation timed out");
+        }
     }
 
-    /**
-     * Check if a command exists on the system.
-     *
-     * @param command command + args to test
-     * @return true if command runs without error
-     */
     private boolean isCommandAvailable(
             String... command) {
         try {
@@ -347,33 +380,16 @@ public class SystemTextToSpeechService
         }
     }
 
-    /**
-     * Sanitize text for shell command injection.
-     *
-     * SECURITY: Prevents shell injection via
-     * text-to-speak content.
-     * Removes/replaces shell-dangerous characters.
-     *
-     * @param text raw text
-     * @return sanitized text safe for shell
-     */
     private String sanitizeForShell(String text) {
         if (text == null) return "";
 
         return text
-                // Remove single quotes (shell injection)
                 .replace("'", " ")
-                // Remove backticks
                 .replace("`", " ")
-                // Remove semicolons
                 .replace(";", " ")
-                // Remove pipe characters
                 .replace("|", " ")
-                // Remove ampersands
                 .replace("&", " and ")
-                // Remove dollar signs
                 .replace("$", " ")
-                // Remove angle brackets
                 .replace("<", " ")
                 .replace(">", " ")
                 .trim();
