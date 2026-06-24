@@ -194,4 +194,5 @@ class WebSearchToolTest {
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(any(Class.class))).thenReturn(Mono.just(responseBody));
     }
-}
+             }
+    
