@@ -1,135 +1,198 @@
 package ai.jarvis.tools.builtin;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.function.Function;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import reactor.core.publisher.Mono;
 
 @DisplayName("WebSearchTool Tests")
 class WebSearchToolTest {
 
     private WebSearchTool tool;
+    private WebClient webClient;
+    private WebClient.Builder builder;
+    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
+    private WebClient.RequestHeadersSpec requestHeadersSpec;
+    private WebClient.ResponseSpec responseSpec;
 
     @BeforeEach
     void setUp() {
-        // FIX: WebSearchTool constructor now requires
-        // maxRelatedTopics as second parameter.
-        // Matches @Value("${jarvis.tools.web-search.max-results:3}")
-        // Use 3 as default — same as production config.
-        tool = new WebSearchTool(
-                WebClient.builder(),
-                3);
+        builder = mock(WebClient.Builder.class);
+        webClient = mock(WebClient.class);
+        requestHeadersUriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        requestHeadersSpec = mock(WebClient.RequestHeadersSpec.class);
+        responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(builder.baseUrl(any(String.class))).thenReturn(builder);
+        when(builder.build()).thenReturn(webClient);
+
+        tool = new WebSearchTool(builder, 3);
     }
 
     @Test
     @DisplayName("returns result for valid query")
     void shouldReturnResultForValidQuery() {
-        // Real DuckDuckGo call — free, no key needed
-        String result = tool.search(
-                "Spring Boot Java framework");
+        WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
+        when(mockResponse.answer()).thenReturn("Direct Answer Content");
+        when(mockResponse.abstractText()).thenReturn("Abstract Text Content");
+        when(mockResponse.relatedTopics()).thenReturn(new ArrayList<>());
 
-        assertThat(result).isNotBlank();
-        assertThat(result).isNotNull();
+        setupWebClientMock(mockResponse);
+
+        String result = tool.search("Spring Boot Java framework");
+
+        assertThat(result)
+                .contains("Direct Answer Content")
+                .contains("Abstract Text Content");
     }
 
     @Test
     @DisplayName("handles empty query gracefully")
     void shouldHandleEmptyQuery() {
         String result = tool.search("");
-
-        assertThat(result)
-                .contains("provide a search query");
+        assertThat(result).contains("provide a search query");
     }
 
     @Test
     @DisplayName("handles null query gracefully")
     void shouldHandleNullQuery() {
         String result = tool.search(null);
-
-        assertThat(result).isNotBlank();
+        assertThat(result).contains("provide a search query");
     }
 
     @Test
     @DisplayName("getTopicSummary returns content")
     void shouldReturnTopicSummary() {
-        String result = tool
-                .getTopicSummary("PostgreSQL");
+        WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
+        when(mockResponse.abstractText()).thenReturn("PostgreSQL Summary Content");
+        when(mockResponse.relatedTopics()).thenReturn(new ArrayList<>());
 
-        assertThat(result).isNotBlank();
+        setupWebClientMock(mockResponse);
+
+        String result = tool.getTopicSummary("PostgreSQL");
+        assertThat(result).contains("PostgreSQL Summary Content");
     }
 
     @Test
     @DisplayName("getTopicSummary handles empty topic")
     void shouldHandleEmptyTopic() {
         String result = tool.getTopicSummary("");
-
-        assertThat(result)
-                .contains("provide a topic");
+        assertThat(result).contains("provide a topic");
     }
 
     @Test
     @DisplayName("getTopicSummary handles null topic")
     void shouldHandleNullTopic() {
         String result = tool.getTopicSummary(null);
-
-        assertThat(result).isNotBlank();
+        assertThat(result).contains("provide a topic");
     }
 
     @Test
-    @DisplayName("never throws exception to caller")
-    void shouldNeverThrowException() {
-        assertThat(tool.search("test query"))
-                .isNotNull();
-        assertThat(tool.getTopicSummary("Java"))
-                .isNotNull();
+    @DisplayName("returns No results message when response is empty")
+    void shouldReturnNoResultsWhenResponseIsEmpty() {
+        WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
+        when(mockResponse.answer()).thenReturn("");
+        when(mockResponse.abstractText()).thenReturn("");
+        when(mockResponse.relatedTopics()).thenReturn(new ArrayList<>());
+
+        setupWebClientMock(mockResponse);
+
+        String result = tool.search("RandomQuery");
+        assertThat(result).contains("No results found for:");
     }
 
     @Test
     @DisplayName("respects maxRelatedTopics config")
     void shouldRespectMaxRelatedTopics() {
-        // Create tool with maxRelatedTopics = 1
-        // Verifies config injection works correctly
-        WebSearchTool toolWithOneResult =
-                new WebSearchTool(
-                        WebClient.builder(),
-                        1);
+        WebSearchTool toolWithOneResult = new WebSearchTool(builder, 1);
+        WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
+        when(mockResponse.answer()).thenReturn("");
+        when(mockResponse.abstractText()).thenReturn("");
 
-        String result = toolWithOneResult
-                .search("Java programming language");
+        WebSearchTool.RelatedTopic topic1 = mock(WebSearchTool.RelatedTopic.class);
+        when(topic1.text()).thenReturn("Topic 1 Content");
+        WebSearchTool.RelatedTopic topic2 = mock(WebSearchTool.RelatedTopic.class);
+        when(topic2.text()).thenReturn("Topic 2 Content");
 
-        // Should return result without exception
-        assertThat(result).isNotNull();
+        List<WebSearchTool.RelatedTopic> topics = new ArrayList<>();
+        topics.add(topic1);
+        topics.add(topic2);
+        when(mockResponse.relatedTopics()).thenReturn(topics);
+
+        setupWebClientMock(mockResponse);
+
+        String result = toolWithOneResult.search("Java");
+        assertThat(result)
+                .contains("Topic 1 Content")
+                .doesNotContain("Topic 2 Content");
     }
 
     @Test
     @DisplayName("guards against zero maxRelatedTopics")
     void shouldGuardAgainstZeroMaxResults() {
-        // Math.max(1, 0) = 1 — no exception thrown
-        WebSearchTool toolWithZero =
-                new WebSearchTool(
-                        WebClient.builder(),
-                        0);
+        WebSearchTool toolWithZero = new WebSearchTool(builder, 0);
+        WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
+        when(mockResponse.answer()).thenReturn("");
+        when(mockResponse.abstractText()).thenReturn("");
 
-        String result = toolWithZero
-                .search("test");
+        WebSearchTool.RelatedTopic topic1 = mock(WebSearchTool.RelatedTopic.class);
+        when(topic1.text()).thenReturn("Topic 1 Content");
+        WebSearchTool.RelatedTopic topic2 = mock(WebSearchTool.RelatedTopic.class);
+        when(topic2.text()).thenReturn("Topic 2 Content");
 
-        assertThat(result).isNotNull();
+        List<WebSearchTool.RelatedTopic> topics = new ArrayList<>();
+        topics.add(topic1);
+        topics.add(topic2);
+        when(mockResponse.relatedTopics()).thenReturn(topics);
+
+        setupWebClientMock(mockResponse);
+
+        String result = toolWithZero.search("test");
+        assertThat(result)
+                .contains("Topic 1 Content")
+                .doesNotContain("Topic 2 Content");
     }
 
     @Test
     @DisplayName("guards against negative maxRelatedTopics")
     void shouldGuardAgainstNegativeMaxResults() {
-        // Math.max(1, -5) = 1 — no exception thrown
-        WebSearchTool toolWithNegative =
-                new WebSearchTool(
-                        WebClient.builder(),
-                        -5);
+        WebSearchTool toolWithNegative = new WebSearchTool(builder, -5);
+        WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
+        when(mockResponse.answer()).thenReturn("");
+        when(mockResponse.abstractText()).thenReturn("");
 
-        String result = toolWithNegative
-                .search("test");
+        WebSearchTool.RelatedTopic topic1 = mock(WebSearchTool.RelatedTopic.class);
+        when(topic1.text()).thenReturn("Topic 1 Content");
+        WebSearchTool.RelatedTopic topic2 = mock(WebSearchTool.RelatedTopic.class);
+        when(topic2.text()).thenReturn("Topic 2 Content");
 
-        assertThat(result).isNotNull();
+        List<WebSearchTool.RelatedTopic> topics = new ArrayList<>();
+        topics.add(topic1);
+        topics.add(topic2);
+        when(mockResponse.relatedTopics()).thenReturn(topics);
+
+        setupWebClientMock(mockResponse);
+
+        String result = toolWithNegative.search("test");
+        assertThat(result)
+                .contains("Topic 1 Content")
+                .doesNotContain("Topic 2 Content");
     }
-}
+
+    private void setupWebClientMock(Object responseBody) {
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(any(Class.class))).thenReturn(Mono.just(responseBody));
+    }
+             }
+    

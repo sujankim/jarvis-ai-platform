@@ -11,24 +11,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
 
-/**
- * Tool for real-time weather information.
- *
- * API: OpenWeatherMap Free Tier
- * Free: 1000 calls/day, no credit card needed
- * Signup: openweathermap.org/api
- *
- * ACTIVATION:
- * Set OPENWEATHER_API_KEY in .env file.
- * Without key: returns helpful setup message.
- *
- *
- * 1. Null check for city + countryCode before trim()
- *    Prevents NullPointerException on null inputs.
- * 2. @JsonProperty("feels_like") on Main record
- *    OpenWeather API returns snake_case field names.
- *    Without this Jackson cannot map feels_like → feelsLike.
- */
 @Slf4j
 @Component
 public class WeatherTool implements JarvisTool {
@@ -65,12 +47,6 @@ public class WeatherTool implements JarvisTool {
         }
     }
 
-    /**
-     * Get current weather for a city.
-     *
-     * @param city city name in English
-     * @return weather description string
-     */
     @Tool(description =
             "Get current weather conditions for "
                     + "any city in the world. "
@@ -97,7 +73,6 @@ public class WeatherTool implements JarvisTool {
                     + "openweathermap.org/api";
         }
 
-        // FIX Issue 1: null check BEFORE trim()
         if (city == null || city.isBlank()) {
             return "Please specify a city name.";
         }
@@ -150,14 +125,6 @@ public class WeatherTool implements JarvisTool {
         }
     }
 
-    /**
-     * Get weather for a city with country code.
-     * More precise than city name alone.
-     *
-     * @param city        city name
-     * @param countryCode ISO country code (US, GB, NP)
-     * @return weather description string
-     */
     @Tool(description =
             "Get current weather for a city with "
                     + "country code for precision. "
@@ -181,10 +148,6 @@ public class WeatherTool implements JarvisTool {
                     + "Add OPENWEATHER_API_KEY to .env";
         }
 
-        // FIX Issue 1: validate BEFORE trim()
-        // city.trim() / countryCode.trim() would throw
-        // NullPointerException if either is null.
-        // Guard must happen before any trim() call.
         if (city == null || city.isBlank()
                 || countryCode == null
                 || countryCode.isBlank()) {
@@ -231,8 +194,6 @@ public class WeatherTool implements JarvisTool {
                     + ". Please try again.";
         }
     }
-
-    // ── Private Helpers ───────────────────────────
 
     private boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
@@ -299,29 +260,22 @@ public class WeatherTool implements JarvisTool {
 
     // ── Response Records ──────────────────────────
 
-    private record WeatherResponse(
+    record WeatherResponse(
             Main main,
             java.util.List<Weather> weather,
             Wind wind,
             Integer visibility) {}
 
-    /**
-     * @JsonProperty("feels_like")
-     * OpenWeather API returns snake_case field names.
-     * Without this annotation Jackson cannot map:
-     * feels_like (API) → feelsLike (Java record)
-     * Results in feelsLike = 0.0 silently.
-     */
-    private record Main(
+    record Main(
             double temp,
             @JsonProperty("feels_like")
             double feelsLike,
             int humidity) {}
 
-    private record Weather(
+    record Weather(
             String main,
             String description) {}
 
-    private record Wind(
+     record Wind(
             double speed) {}
-}
+        }
