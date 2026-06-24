@@ -132,7 +132,11 @@ and documentation written before any code.
 **Target:** `v0.5.0`
 
 ### Core (Maintainer Builds)
-* 🔨 `WhisperTranscriptionService` (Ollama whisper)
+- Whisper via Ollama ← INCORRECT
++ Whisper via Groq API (free, 6000/day) OR
++ whisper.cpp local server
++ Both use same OpenAI-compatible API format
+* 🔨 `WhisperTranscriptionService` abstracts both
 * 🔨 `TextToSpeechService` (local TTS)
 * 🔨 `VoiceConversationService` (full loop)
 * 🔨 `VoiceSession` entity + table (V15)
