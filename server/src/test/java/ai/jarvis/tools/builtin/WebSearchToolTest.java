@@ -107,24 +107,23 @@ class WebSearchToolTest {
         setupWebClientMock(mockResponse);
 
         String result = tool.search("RandomQuery");
-        assertThat(result.trim()).isEqualTo("No results");
+        assertThat(result).contains("No results found for:");
     }
 
     @Test
     @DisplayName("respects maxRelatedTopics config")
     void shouldRespectMaxRelatedTopics() {
         WebSearchTool toolWithOneResult = new WebSearchTool(builder, 1);
-
         WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
         when(mockResponse.answer()).thenReturn("");
         when(mockResponse.abstractText()).thenReturn("");
 
-        WebSearchTool.Topic topic1 = mock(WebSearchTool.Topic.class);
+        WebSearchTool.RelatedTopic topic1 = mock(WebSearchTool.RelatedTopic.class);
         when(topic1.text()).thenReturn("Topic 1 Content");
-        WebSearchTool.Topic topic2 = mock(WebSearchTool.Topic.class);
+        WebSearchTool.RelatedTopic topic2 = mock(WebSearchTool.RelatedTopic.class);
         when(topic2.text()).thenReturn("Topic 2 Content");
 
-        List<WebSearchTool.Topic> topics = new ArrayList<>();
+        List<WebSearchTool.RelatedTopic> topics = new ArrayList<>();
         topics.add(topic1);
         topics.add(topic2);
         when(mockResponse.relatedTopics()).thenReturn(topics);
@@ -141,17 +140,16 @@ class WebSearchToolTest {
     @DisplayName("guards against zero maxRelatedTopics")
     void shouldGuardAgainstZeroMaxResults() {
         WebSearchTool toolWithZero = new WebSearchTool(builder, 0);
-
         WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
         when(mockResponse.answer()).thenReturn("");
         when(mockResponse.abstractText()).thenReturn("");
 
-        WebSearchTool.Topic topic1 = mock(WebSearchTool.Topic.class);
+        WebSearchTool.RelatedTopic topic1 = mock(WebSearchTool.RelatedTopic.class);
         when(topic1.text()).thenReturn("Topic 1 Content");
-        WebSearchTool.Topic topic2 = mock(WebSearchTool.Topic.class);
+        WebSearchTool.RelatedTopic topic2 = mock(WebSearchTool.RelatedTopic.class);
         when(topic2.text()).thenReturn("Topic 2 Content");
 
-        List<WebSearchTool.Topic> topics = new ArrayList<>();
+        List<WebSearchTool.RelatedTopic> topics = new ArrayList<>();
         topics.add(topic1);
         topics.add(topic2);
         when(mockResponse.relatedTopics()).thenReturn(topics);
@@ -168,17 +166,16 @@ class WebSearchToolTest {
     @DisplayName("guards against negative maxRelatedTopics")
     void shouldGuardAgainstNegativeMaxResults() {
         WebSearchTool toolWithNegative = new WebSearchTool(builder, -5);
-
         WebSearchTool.SearchResponse mockResponse = mock(WebSearchTool.SearchResponse.class);
         when(mockResponse.answer()).thenReturn("");
         when(mockResponse.abstractText()).thenReturn("");
 
-        WebSearchTool.Topic topic1 = mock(WebSearchTool.Topic.class);
+        WebSearchTool.RelatedTopic topic1 = mock(WebSearchTool.RelatedTopic.class);
         when(topic1.text()).thenReturn("Topic 1 Content");
-        WebSearchTool.Topic topic2 = mock(WebSearchTool.Topic.class);
+        WebSearchTool.RelatedTopic topic2 = mock(WebSearchTool.RelatedTopic.class);
         when(topic2.text()).thenReturn("Topic 2 Content");
 
-        List<WebSearchTool.Topic> topics = new ArrayList<>();
+        List<WebSearchTool.RelatedTopic> topics = new ArrayList<>();
         topics.add(topic1);
         topics.add(topic2);
         when(mockResponse.relatedTopics()).thenReturn(topics);
@@ -195,6 +192,6 @@ class WebSearchToolTest {
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(any(Class.class))).thenReturn(Mono.Mono.just(responseBody));
+        when(responseSpec.bodyToMono(any(Class.class))).thenReturn(Mono.just(responseBody));
     }
 }
