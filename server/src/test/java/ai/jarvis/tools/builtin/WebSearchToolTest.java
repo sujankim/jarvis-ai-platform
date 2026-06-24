@@ -188,11 +188,21 @@ class WebSearchToolTest {
                 .doesNotContain("Topic 2 Content");
     }
 
+    /**
+     * Helper that fully mocks the WebClient chain.
+     * The critical .uri(Function) stub is now present.
+     */
     private void setupWebClientMock(Object responseBody) {
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(any(Class.class))).thenReturn(Mono.just(responseBody));
+        when(webClient.get())
+                .thenReturn(requestHeadersUriSpec);
+
+        when(requestHeadersUriSpec
+                .uri(any(Function.class)))
+                .thenReturn(requestHeadersSpec);
+
+        when(requestHeadersSpec.retrieve())
+                .thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(any(Class.class)))
+                .thenReturn(Mono.just(responseBody));
     }
-             }
-    
+}
