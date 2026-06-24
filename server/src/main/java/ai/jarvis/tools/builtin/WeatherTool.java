@@ -276,6 +276,6 @@ public class WeatherTool implements JarvisTool {
             String main,
             String description) {}
 
-    private record Wind(
+     record Wind(
             double speed) {}
         }
