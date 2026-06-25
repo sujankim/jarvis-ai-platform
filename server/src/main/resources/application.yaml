@@ -181,22 +181,26 @@ jarvis:
   # ── Voice Assistant (Phase 5) ─────────────────
   voice:
     whisper:
-      # MODE 1: Groq API (cloud, free tier)
+      # Transcription backend — two options:
+      #
+      # Option 1: Groq API (recommended)
       # Get free key: console.groq.com
-      # 6000 requests/day on free tier
-      # Model: whisper-large-v3-turbo
+      # 6000 requests/day free tier
       base-url: ${JARVIS_WHISPER_BASE_URL:https://api.groq.com/openai/v1}
       api-key: ${GROQ_API_KEY:}
       model: ${JARVIS_WHISPER_MODEL:whisper-large-v3-turbo}
-
-      # MODE 2: Local whisper.cpp server
-      # Uncomment to use local instead of Groq:
+      #
+      # Option 2: Local whisper.cpp server
+      # Setup: github.com/ggerganov/whisper.cpp
+      # Run server on port 8178, then set:
       # base-url: http://localhost:8178
       # api-key: not-needed
-      # model: whisper-1
 
     tts:
-      # System TTS (built-in, zero setup)
+      # System TTS — zero setup required
+      # Windows: PowerShell System.Speech
+      # macOS:   say command
+      # Linux:   espeak or text2wave
       enabled: true
 
 # ═══════════════════════════════════════════════════
