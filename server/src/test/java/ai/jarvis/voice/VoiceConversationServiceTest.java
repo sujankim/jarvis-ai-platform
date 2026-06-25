@@ -95,10 +95,6 @@ class VoiceConversationServiceTest {
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi."));
-        when(textToSpeechService
-                .speakAndPlay(any()))
-                .thenReturn(Mono.empty());
-
         StepVerifier
                 .create(service.voiceChat(
                         audio,
