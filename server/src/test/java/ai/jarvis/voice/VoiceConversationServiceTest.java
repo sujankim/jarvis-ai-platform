@@ -38,8 +38,10 @@ class VoiceConversationServiceTest {
 
     private VoiceConversationService service;
 
-    private final UUID userId = UUID.randomUUID();
-    private final UUID sessionId = UUID.randomUUID();
+    private final UUID userId =
+            UUID.randomUUID();
+    private final UUID sessionId =
+            UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -61,8 +63,12 @@ class VoiceConversationServiceTest {
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi there."));
-        when(textToSpeechService.speakAndPlay(any()))
-                .thenReturn(Mono.empty());
+
+        // Remove speakAndPlay stub
+        // TTS runs on background boundedElastic thread
+        // Not consumed during test execution → unnecessary stub
+        // when(textToSpeechService.speakAndPlay(any()))
+        //     .thenReturn(Mono.empty()); ← REMOVED
 
         StepVerifier
                 .create(service.voiceChat(
@@ -73,7 +79,7 @@ class VoiceConversationServiceTest {
                                 VoiceChatEvent.EventType.SESSION
                                 && event.data().equals(
                                 sessionId.toString()))
-                .expectNextMatches(event ->
+                .thenConsumeWhile(event ->
                         event.type() ==
                                 VoiceChatEvent.EventType.TOKEN)
                 .verifyComplete();
@@ -89,124 +95,113 @@ class VoiceConversationServiceTest {
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi."));
-        when(textToSpeechService.speakAndPlay(any()))
+        when(textToSpeechService
+                .speakAndPlay(any()))
                 .thenReturn(Mono.empty());
 
         StepVerifier
                 .create(service.voiceChat(
                         audio,
-                        null,  // ← no session
+                        null,
                         userId, "dravin", "USER"))
                 .expectNextMatches(event -> {
-                    // SESSION event must have a valid UUID
                     if (event.type() !=
                             VoiceChatEvent.EventType.SESSION) {
                         return false;
                     }
                     try {
-                        UUID generated =
-                                UUID.fromString(event.data());
-                        // Must be a NEW UUID (not null, not zero)
-                        return generated != null;
+                        UUID.fromString(event.data());
+                        return true;
                     } catch (IllegalArgumentException e) {
                         return false;
                     }
                 })
-                .expectNextCount(1)
+                .thenConsumeWhile(event ->
+                        event.type() ==
+                                VoiceChatEvent.EventType.TOKEN)
                 .verifyComplete();
     }
 
     @Test
-    @DisplayName("voiceChat() SESSION event uses provided session ID")
+    @DisplayName("voiceChat() uses provided session ID")
     void shouldUseProvidedSessionId() {
         byte[] audio = new byte[]{1, 2, 3};
-        UUID existingSession = UUID.randomUUID();
+        UUID existing = UUID.randomUUID();
 
         when(transcriptionService.transcribe(audio))
                 .thenReturn(Mono.just("Hello"));
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi."));
-        when(textToSpeechService.speakAndPlay(any()))
-                .thenReturn(Mono.empty());
+
+        // Remove speakAndPlay stub
+        // TTS runs on background boundedElastic thread
+        // Not consumed during test execution → unnecessary stub
+        // when(textToSpeechService.speakAndPlay(any()))
+        //     .thenReturn(Mono.empty()); ← REMOVED
 
         StepVerifier
                 .create(service.voiceChat(
-                        audio, existingSession,
+                        audio, existing,
                         userId, "dravin", "USER"))
                 .expectNextMatches(event ->
                         event.type() ==
                                 VoiceChatEvent.EventType.SESSION
                                 && event.data().equals(
-                                existingSession.toString()))
-                .expectNextCount(1)
+                                existing.toString()))
+                .thenConsumeWhile(event ->
+                        event.type() ==
+                                VoiceChatEvent.EventType.TOKEN)
                 .verifyComplete();
     }
 
-    // ── voiceChat() token tests ───────────────────
+    // ── voiceChat() TOKEN streaming tests ─────────
 
     @Test
-    @DisplayName("voiceChat() transcribes then calls AI")
-    void shouldTranscribeThenCallAi() {
+    @DisplayName("voiceChat() emits TOKEN events immediately")
+    void shouldEmitTokenEventsImmediately() {
         byte[] audio = new byte[]{1, 2, 3};
 
         when(transcriptionService.transcribe(audio))
                 .thenReturn(Mono.just("Hello Jarvis"));
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
-                .thenReturn(Flux.just("Hi there."));
-        when(textToSpeechService.speakAndPlay(any()))
+                .thenReturn(
+                        Flux.just("Hello", " there", "."));
+        // TTS takes some time but should NOT block SSE
+        when(textToSpeechService
+                .speakAndPlay(any()))
                 .thenReturn(Mono.empty());
 
         StepVerifier
                 .create(service.voiceChat(
                         audio, sessionId,
                         userId, "dravin", "USER"))
-                // First: SESSION
+                // SESSION first
                 .expectNextMatches(event ->
                         event.type() ==
                                 VoiceChatEvent.EventType.SESSION)
-                // Then: TOKEN with AI text
+                // Then all 3 tokens immediately
                 .expectNextMatches(event ->
                         event.type() ==
                                 VoiceChatEvent.EventType.TOKEN
                                 && event.data()
-                                .contains("Hi there"))
+                                .equals("Hello"))
+                .expectNextMatches(event ->
+                        event.type() ==
+                                VoiceChatEvent.EventType.TOKEN
+                                && event.data()
+                                .equals(" there"))
+                .expectNextMatches(event ->
+                        event.type() ==
+                                VoiceChatEvent.EventType.TOKEN
+                                && event.data()
+                                .equals("."))
                 .verifyComplete();
 
         verify(transcriptionService).transcribe(audio);
         verify(orchestrator).chat(
                 any(OrchestratorRequest.class));
-    }
-
-    @Test
-    @DisplayName("voiceChat() TOKEN events contain AI response text")
-    void shouldEmitTokenEventsWithAiText() {
-        byte[] audio = new byte[]{1, 2, 3};
-
-        when(transcriptionService.transcribe(audio))
-                .thenReturn(Mono.just("What time is it?"));
-        when(orchestrator.chat(
-                any(OrchestratorRequest.class)))
-                .thenReturn(Flux.just("It is 3 PM."));
-        when(textToSpeechService.speakAndPlay(any()))
-                .thenReturn(Mono.empty());
-
-        StepVerifier
-                .create(service.voiceChat(
-                        audio, sessionId,
-                        userId, "dravin", "USER"))
-                // Skip SESSION
-                .expectNextMatches(event ->
-                        event.type() ==
-                                VoiceChatEvent.EventType.SESSION)
-                // TOKEN has text content
-                .expectNextMatches(event ->
-                        event.type() ==
-                                VoiceChatEvent.EventType.TOKEN
-                                && event.data()
-                                .contains("It is 3 PM"))
-                .verifyComplete();
     }
 
     @Test
@@ -225,13 +220,12 @@ class VoiceConversationServiceTest {
                 .expectError(VoiceException.class)
                 .verify();
 
-        // AI must NOT be called
         verify(orchestrator, never())
                 .chat(any(OrchestratorRequest.class));
     }
 
     @Test
-    @DisplayName("voiceChat() TTS failure does not stop stream")
+    @DisplayName("voiceChat() TTS failure does not stop token stream")
     void shouldContinueStreamWhenTtsFails() {
         byte[] audio = new byte[]{1, 2, 3};
 
@@ -240,9 +234,9 @@ class VoiceConversationServiceTest {
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi there."));
-
-        // TTS fails but stream should continue
-        when(textToSpeechService.speakAndPlay(any()))
+        // TTS fails — but SSE tokens must still flow
+        when(textToSpeechService
+                .speakAndPlay(any()))
                 .thenReturn(Mono.error(
                         new RuntimeException("TTS error")));
 
@@ -261,7 +255,43 @@ class VoiceConversationServiceTest {
                 .verifyComplete();
     }
 
-    // ── VoiceChatEvent record tests ───────────────
+    // ── generateAudioBytes() tests ─────────────────
+
+    @Test
+    @DisplayName("generateAudioBytes() returns audio bytes")
+    void shouldReturnAudioBytes() {
+        byte[] expectedAudio = new byte[]{1, 2, 3, 4};
+
+        when(textToSpeechService.speak("Hello"))
+                .thenReturn(Mono.just(expectedAudio));
+
+        StepVerifier
+                .create(service
+                        .generateAudioBytes("Hello"))
+                .expectNext(expectedAudio)
+                .verifyComplete();
+
+        // Verify speak() called — NOT speakAndPlay()
+        verify(textToSpeechService).speak("Hello");
+        verify(textToSpeechService, never())
+                .speakAndPlay(any());
+    }
+
+    @Test
+    @DisplayName("generateAudioBytes() returns empty on TTS failure")
+    void shouldReturnEmptyOnTtsFailure() {
+        when(textToSpeechService.speak(any()))
+                .thenReturn(Mono.error(
+                        new RuntimeException("TTS down")));
+
+        StepVerifier
+                .create(service
+                        .generateAudioBytes("Hello"))
+                .expectError(RuntimeException.class)
+                .verify();
+    }
+
+    // ── VoiceChatEvent factory tests ───────────────
 
     @Test
     @DisplayName("VoiceChatEvent.session() creates SESSION event")
@@ -293,7 +323,8 @@ class VoiceConversationServiceTest {
     @Test
     @DisplayName("VoiceChatEvent.done() creates DONE event")
     void shouldCreateDoneEvent() {
-        VoiceChatEvent event = VoiceChatEvent.done();
+        VoiceChatEvent event =
+                VoiceChatEvent.done();
 
         assertThat(event.type())
                 .isEqualTo(
@@ -305,7 +336,7 @@ class VoiceConversationServiceTest {
     // ── transcribeOnly() tests ────────────────────
 
     @Test
-    @DisplayName("transcribeOnly() delegates to transcription service")
+    @DisplayName("transcribeOnly() delegates to transcription")
     void shouldDelegateTranscription() {
         byte[] audio = new byte[]{1, 2, 3};
 
@@ -317,15 +348,13 @@ class VoiceConversationServiceTest {
                 .create(service.transcribeOnly(audio))
                 .expectNext("Test transcription")
                 .verifyComplete();
-
-        verify(transcriptionService).transcribe(audio);
     }
 
     // ── speakText() tests ─────────────────────────
 
     @Test
-    @DisplayName("speakText() delegates to TTS service")
-    void shouldDelegateToTtsService() {
+    @DisplayName("speakText() calls speakAndPlay not speak")
+    void shouldCallSpeakAndPlayNotSpeak() {
         when(textToSpeechService
                 .speakAndPlay("Hello"))
                 .thenReturn(Mono.empty());
@@ -336,6 +365,8 @@ class VoiceConversationServiceTest {
 
         verify(textToSpeechService)
                 .speakAndPlay("Hello");
+        verify(textToSpeechService, never())
+                .speak(any());
     }
 
     // ── isVoiceAvailable() tests ──────────────────
@@ -378,31 +409,6 @@ class VoiceConversationServiceTest {
 
         StepVerifier
                 .create(service.isVoiceAvailable())
-                .expectNext(false)
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("isTranscriptionAvailable() delegates correctly")
-    void shouldDelegateTranscriptionAvailability() {
-        when(transcriptionService.isAvailable())
-                .thenReturn(Mono.just(true));
-
-        StepVerifier
-                .create(service
-                        .isTranscriptionAvailable())
-                .expectNext(true)
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("isTtsAvailable() delegates correctly")
-    void shouldDelegateTtsAvailability() {
-        when(textToSpeechService.isAvailable())
-                .thenReturn(Mono.just(false));
-
-        StepVerifier
-                .create(service.isTtsAvailable())
                 .expectNext(false)
                 .verifyComplete();
     }

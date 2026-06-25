@@ -7,29 +7,25 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.UUID;
 
 /**
  * Orchestrates the full voice conversation loop.
  *
- * FLOW:
- * 1. audio → WhisperTranscriptionService → text
- * 2. text → AiOrchestrator.chat() → Flux<String>
- * 3. Flux<String> → sentence buffer → TTS
+ * FIXES (CodeRabbit Round 2):
  *
- * FIXES (CodeRabbit):
- * 1. Security: Never log transcribed text or AI response
- *    content. Log metadata only (length, session, user).
+ * Fix 1: generateAudioBytes() added.
+ * /speak/bytes needs bytes back, not server playback.
+ * speakText() calls speakAndPlay() → void → wrong.
+ * generateAudioBytes() calls speak() → Mono<byte[]>.
  *
- * 2. Session ID: voiceChat() now returns Flux of
- *    VoiceChatEvent which includes the session ID
- *    as the first event. Client stores it for continuity.
- *
- * 3. TTS ordering: concatMap replaces fire-and-forget
- *    .subscribe(). Sentences now play sequentially.
- *    Previous .subscribe() caused concurrent execution
- *    → later sentences could play before earlier ones.
+ * Fix 2: SSE tokens independent from TTS.
+ * BEFORE: emit token AFTER TTS completes → blocks SSE
+ * AFTER:  token stream → SSE immediately (fast path)
+ *         sentence buffer → TTS in parallel (slow path)
+ * Two independent pipelines — UI gets incremental output.
  */
 @Slf4j
 @Service
@@ -50,20 +46,21 @@ public class VoiceConversationService {
     /**
      * Full voice chat cycle.
      *
-     * Returns Flux<VoiceChatEvent> — first event
-     * is always SESSION containing the session ID.
-     * Subsequent events are TOKEN (AI response text).
-     * Final event is DONE.
+     * Returns Flux<VoiceChatEvent>:
+     * - First: SESSION event with session ID
+     * - Then:  TOKEN events (AI response, streamed fast)
+     * - TTS:   plays sentences in background (parallel)
      *
-     * FIX Issue 2: First event contains session ID
-     * so client can attach next message to same session.
+     * FIX Issue 2: SSE tokens are NOT blocked by TTS.
+     * Tokens stream to client immediately as AI generates.
+     * TTS runs as a side effect on parallel scheduler.
      *
      * @param audioBytes  raw audio from microphone
      * @param sessionId   existing session (null = new)
      * @param userId      authenticated user
      * @param username    display name for prompt
      * @param role        user role for prompt
-     * @return Flux<VoiceChatEvent> with session + tokens
+     * @return Flux<VoiceChatEvent>
      */
     public Flux<VoiceChatEvent> voiceChat(
             byte[] audioBytes,
@@ -72,8 +69,6 @@ public class VoiceConversationService {
             String username,
             String role) {
 
-        // Resolve session ID upfront so client
-        // gets it in the first event
         UUID resolvedSessionId = sessionId != null
                 ? sessionId
                 : UUID.randomUUID();
@@ -81,8 +76,6 @@ public class VoiceConversationService {
         return transcriptionService
                 .transcribe(audioBytes)
                 .doOnSuccess(text ->
-                        // FIX Issue 1: log length ONLY
-                        // NEVER log transcribed content
                         log.info(
                                 "Voice input: chars={} "
                                         + "session={}",
@@ -98,20 +91,27 @@ public class VoiceConversationService {
                                     role,
                                     userId);
 
-                    // FIX Issue 2: emit session ID first
+                    // SESSION event first
                     Flux<VoiceChatEvent> sessionEvent =
                             Flux.just(
                                     VoiceChatEvent.session(
                                             resolvedSessionId));
 
-                    // Stream AI tokens with TTS
-                    Flux<VoiceChatEvent> tokenEvents =
-                            streamWithTts(
-                                    orchestrator.chat(request),
-                                    resolvedSessionId);
+                    // FIX Issue 2: separate pipelines
+                    Flux<String> tokenStream =
+                            orchestrator.chat(request);
 
-                    return sessionEvent.concatWith(
-                            tokenEvents);
+                    // Run TTS in background
+                    // Does NOT block SSE token emission
+                    startTtsPipeline(tokenStream);
+
+                    // Emit tokens immediately to SSE
+                    Flux<VoiceChatEvent> tokenEvents =
+                            tokenStream.map(
+                                    VoiceChatEvent::token);
+
+                    return sessionEvent
+                            .concatWith(tokenEvents);
                 });
     }
 
@@ -128,7 +128,8 @@ public class VoiceConversationService {
     }
 
     /**
-     * Speak text aloud via TTS.
+     * Speak text aloud via TTS (server speakers).
+     * Returns Mono<Void> — no audio bytes returned.
      *
      * @param text text to speak
      * @return Mono<Void> completes when done
@@ -136,6 +137,20 @@ public class VoiceConversationService {
     public Mono<Void> speakText(String text) {
         return textToSpeechService
                 .speakAndPlay(text);
+    }
+
+    /**
+     * FIX Issue 1: Generate audio bytes from text.
+     * /speak/bytes needs byte[] not server playback.
+     *
+     * Calls speak() → Mono<byte[]> (returns audio data)
+     * NOT speakAndPlay() → Mono<Void> (plays on server)
+     *
+     * @param text text to convert to audio
+     * @return Mono<byte[]> audio data (wav format)
+     */
+    public Mono<byte[]> generateAudioBytes(String text) {
+        return textToSpeechService.speak(text);
     }
 
     /**
@@ -162,44 +177,39 @@ public class VoiceConversationService {
     // ── Private Helpers ───────────────────────────
 
     /**
-     * Stream AI tokens as VoiceChatEvents with TTS.
+     * FIX Issue 2: TTS pipeline runs independently.
      *
-     * TTS now sequential via concatMap.
-     * Previous: .subscribe() → concurrent execution
-     * → sentences played out of order.
-     * Now: concatMap(1) → each sentence waits for
-     * the previous one to finish playing.
+     * Starts a SEPARATE subscription to the token stream
+     * that buffers into sentences and speaks them.
+     * This pipeline runs on boundedElastic (background).
      *
-     * FIX Issue 1: doOnNext logs token count ONLY.
-     * Never logs the actual token content.
+     * The ORIGINAL tokenStream subscription (SSE)
+     * is completely unaffected — tokens stream fast.
      *
-     * @param tokenStream   Flux<String> from AiOrchestrator
-     * @param sessionId     for logging only
-     * @return Flux<VoiceChatEvent> TOKEN events
+     * WHY separate subscription works:
+     * AiOrchestrator.chat() returns a HOT-ish Flux.
+     * Both subscribers receive all tokens independently.
+     * SSE subscriber: emit immediately
+     * TTS subscriber: buffer → sentence → speak
+     *
+     * @param tokenStream Flux<String> from AiOrchestrator
      */
-    private Flux<VoiceChatEvent> streamWithTts(
-            Flux<String> tokenStream,
-            UUID sessionId) {
+    private void startTtsPipeline(
+            Flux<String> tokenStream) {
 
         StringBuilder buffer = new StringBuilder();
 
-        // Collect complete sentences from token stream
-        Flux<String> sentences = tokenStream
-                .doOnNext(token -> {
-                    // log count only
-                    // Never log token content
-                })
+        tokenStream
+                // Buffer tokens into sentences
                 .flatMap(token -> {
                     buffer.append(token);
 
                     boolean isSentenceEnd =
                             isSentenceBoundary(token);
-
                     int wordCount =
                             buffer.toString()
                                     .split("\\s+")
                                     .length;
-
                     boolean isBufferFull =
                             wordCount >= MAX_BUFFER_TOKENS;
 
@@ -212,39 +222,38 @@ public class VoiceConversationService {
                             return Flux.just(sentence);
                         }
                     }
-
-                    return Flux.empty();
+                    return Flux.<String>empty();
                 })
+                // Flush remaining buffer at end
                 .concatWith(Mono.fromCallable(() -> {
                     String remaining =
                             buffer.toString().trim();
                     buffer.setLength(0);
                     return remaining;
-                }).filter(s -> !s.isBlank()));
-
-        // concatMap ensures sequential TTS
-        // Each sentence waits for previous to finish
-        // playing before starting the next one.
-        // concatMap = flatMap with concurrency=1
-        return sentences
+                }).filter(s -> !s.isBlank()))
+                // Speak sentences sequentially
+                // concatMap = one at a time
                 .concatMap(sentence ->
                         textToSpeechService
                                 .speakAndPlay(sentence)
                                 .doOnSuccess(v ->
                                         log.debug(
-                                                "Spoke sentence: "
-                                                        + "chars={}",
+                                                "Spoke: chars={}",
                                                 sentence.length()))
                                 .onErrorResume(e -> {
                                     log.warn(
                                             "TTS failed: {}",
                                             e.getMessage());
-                                    // Continue with next sentence
                                     return Mono.empty();
-                                })
-                                .thenReturn(
-                                        VoiceChatEvent
-                                                .token(sentence)));
+                                }))
+                // Subscribe on background thread
+                // Never blocks the SSE token stream
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        null,
+                        error -> log.warn(
+                                "TTS pipeline error: {}",
+                                error.getMessage()));
     }
 
     private boolean isSentenceBoundary(String token) {
@@ -262,15 +271,6 @@ public class VoiceConversationService {
 
     // ── Event Record ──────────────────────────────
 
-    /**
-     * Typed events for voice chat stream.
-     *
-     * SESSION event: first event, contains session ID
-     *   → client stores for next voice turn
-     * TOKEN event:   AI response text tokens
-     *   → client displays + TTS plays
-     * DONE event:    stream complete signal
-     */
     public record VoiceChatEvent(
             EventType type,
             String data) {

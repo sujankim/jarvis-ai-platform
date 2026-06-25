@@ -155,7 +155,8 @@ public class VoiceController {
     @Operation(
             summary = "Get audio bytes for text",
             description =
-                    "Send text, receive raw audio/wav bytes."
+                    "Send text, receive raw audio/wav bytes "
+                            + "for client-side playback."
     )
     @PostMapping(
             value = "/speak/bytes",
@@ -165,11 +166,19 @@ public class VoiceController {
     public Mono<byte[]> speakBytes(
             @Valid @RequestBody VoiceRequest request) {
 
+        log.info(
+                "TTS bytes request: chars={}",
+                request.text().length());
+
+        // generateAudioBytes() returns
+        // actual audio byte[] from speak() method.
+        // Previous: speakText() + thenReturn(new byte[0])
+        // → called speakAndPlay() (server playback)
+        // → returned empty bytes (wrong)
+        // Now: generateAudioBytes() calls speak()
+        // → returns actual wav audio bytes
         return voiceConversationService
-                .speakText(request.text())
-                .thenReturn(new byte[0])
-                // return error not empty bytes
-                // Empty bytes would look like success to client
+                .generateAudioBytes(request.text())
                 .onErrorMap(error -> {
                     log.error(
                             "TTS bytes failed: {}",
