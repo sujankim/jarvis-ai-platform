@@ -22,6 +22,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * NOTE: speakAndPlay() is intentionally NOT stubbed
+ * in SESSION/TOKEN verification tests.
+ *
+ * WHY: TTS runs on a background boundedElastic thread
+ * via startTtsPipeline() in VoiceConversationService.
+ * The stub is never consumed during StepVerifier
+ * execution → Mockito strict mode throws
+ * UnnecessaryStubbingException.
+ *
+ * ONLY stub speakAndPlay() when test specifically
+ * verifies TTS is called (e.g. speakText test).
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("VoiceConversationService Tests")
 class VoiceConversationServiceTest {
@@ -64,11 +77,9 @@ class VoiceConversationServiceTest {
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi there."));
 
-        // Remove speakAndPlay stub
-        // TTS runs on background boundedElastic thread
-        // Not consumed during test execution → unnecessary stub
-        // when(textToSpeechService.speakAndPlay(any()))
-        //     .thenReturn(Mono.empty()); ← REMOVED
+        // speakAndPlay NOT stubbed — TTS runs on
+        // background boundedElastic thread and is
+        // not consumed during test execution
 
         StepVerifier
                 .create(service.voiceChat(
@@ -95,10 +106,15 @@ class VoiceConversationServiceTest {
         when(orchestrator.chat(
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi."));
+
+        // speakAndPlay NOT stubbed — TTS runs on
+        // background boundedElastic thread and is
+        // not consumed during test execution
+
         StepVerifier
                 .create(service.voiceChat(
                         audio,
-                        null,
+                        null,   // ← no session
                         userId, "dravin", "USER"))
                 .expectNextMatches(event -> {
                     if (event.type() !=
@@ -106,8 +122,9 @@ class VoiceConversationServiceTest {
                         return false;
                     }
                     try {
-                        UUID.fromString(event.data());
-                        return true;
+                        UUID generated =
+                                UUID.fromString(event.data());
+                        return generated != null;
                     } catch (IllegalArgumentException e) {
                         return false;
                     }
@@ -130,11 +147,9 @@ class VoiceConversationServiceTest {
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi."));
 
-        // Remove speakAndPlay stub
-        // TTS runs on background boundedElastic thread
-        // Not consumed during test execution → unnecessary stub
-        // when(textToSpeechService.speakAndPlay(any()))
-        //     .thenReturn(Mono.empty()); ← REMOVED
+        // speakAndPlay NOT stubbed — TTS runs on
+        // background boundedElastic thread and is
+        // not consumed during test execution
 
         StepVerifier
                 .create(service.voiceChat(
@@ -164,10 +179,12 @@ class VoiceConversationServiceTest {
                 any(OrchestratorRequest.class)))
                 .thenReturn(
                         Flux.just("Hello", " there", "."));
-        // TTS takes some time but should NOT block SSE
-        when(textToSpeechService
-                .speakAndPlay(any()))
-                .thenReturn(Mono.empty());
+
+        // speakAndPlay NOT stubbed — TTS runs on
+        // background boundedElastic thread and is
+        // not consumed during test execution.
+        // This test verifies SSE tokens stream fast
+        // independent of TTS execution.
 
         StepVerifier
                 .create(service.voiceChat(
@@ -216,6 +233,7 @@ class VoiceConversationServiceTest {
                 .expectError(VoiceException.class)
                 .verify();
 
+        // AI must NOT be called
         verify(orchestrator, never())
                 .chat(any(OrchestratorRequest.class));
     }
@@ -231,19 +249,21 @@ class VoiceConversationServiceTest {
                 any(OrchestratorRequest.class)))
                 .thenReturn(Flux.just("Hi there."));
 
-        // Remove speakAndPlay stub
-        // TTS runs on background boundedElastic thread
-        // Stub not consumed during test → UnnecessaryStubbingException
-        // This test verifies SSE tokens flow regardless of TTS state
-        // TTS failure handling is tested at service unit level separately
+        // speakAndPlay NOT stubbed — TTS runs on
+        // background boundedElastic thread and is
+        // not consumed during test execution.
+        // This test verifies SSE tokens still flow
+        // regardless of TTS state.
 
         StepVerifier
                 .create(service.voiceChat(
                         audio, sessionId,
                         userId, "dravin", "USER"))
+                // SESSION still emitted
                 .expectNextMatches(event ->
                         event.type() ==
                                 VoiceChatEvent.EventType.SESSION)
+                // TOKEN still emitted
                 .expectNextMatches(event ->
                         event.type() ==
                                 VoiceChatEvent.EventType.TOKEN)
@@ -255,7 +275,8 @@ class VoiceConversationServiceTest {
     @Test
     @DisplayName("generateAudioBytes() returns audio bytes")
     void shouldReturnAudioBytes() {
-        byte[] expectedAudio = new byte[]{1, 2, 3, 4};
+        byte[] expectedAudio =
+                new byte[]{1, 2, 3, 4};
 
         when(textToSpeechService.speak("Hello"))
                 .thenReturn(Mono.just(expectedAudio));
@@ -273,8 +294,8 @@ class VoiceConversationServiceTest {
     }
 
     @Test
-    @DisplayName("generateAudioBytes() returns empty on TTS failure")
-    void shouldReturnEmptyOnTtsFailure() {
+    @DisplayName("generateAudioBytes() propagates TTS error")
+    void shouldPropagateAudioBytesError() {
         when(textToSpeechService.speak(any()))
                 .thenReturn(Mono.error(
                         new RuntimeException("TTS down")));
@@ -343,6 +364,8 @@ class VoiceConversationServiceTest {
                 .create(service.transcribeOnly(audio))
                 .expectNext("Test transcription")
                 .verifyComplete();
+
+        verify(transcriptionService).transcribe(audio);
     }
 
     // ── speakText() tests ─────────────────────────
@@ -358,6 +381,8 @@ class VoiceConversationServiceTest {
                 .create(service.speakText("Hello"))
                 .verifyComplete();
 
+        // speakAndPlay stubbed here because this
+        // test specifically verifies TTS IS called
         verify(textToSpeechService)
                 .speakAndPlay("Hello");
         verify(textToSpeechService, never())
@@ -404,6 +429,31 @@ class VoiceConversationServiceTest {
 
         StepVerifier
                 .create(service.isVoiceAvailable())
+                .expectNext(false)
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("isTranscriptionAvailable() delegates correctly")
+    void shouldDelegateTranscriptionAvailability() {
+        when(transcriptionService.isAvailable())
+                .thenReturn(Mono.just(true));
+
+        StepVerifier
+                .create(service
+                        .isTranscriptionAvailable())
+                .expectNext(true)
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("isTtsAvailable() delegates correctly")
+    void shouldDelegateTtsAvailability() {
+        when(textToSpeechService.isAvailable())
+                .thenReturn(Mono.just(false));
+
+        StepVerifier
+                .create(service.isTtsAvailable())
                 .expectNext(false)
                 .verifyComplete();
     }
