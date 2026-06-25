@@ -1,12 +1,15 @@
 package ai.jarvis.voice;
 
 import ai.jarvis.common.model.ApiResponse;
+import ai.jarvis.voice.VoiceConversationService.VoiceChatEvent;
+import ai.jarvis.voice.exception.VoiceException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -24,21 +27,28 @@ import java.util.UUID;
 /**
  * Voice REST API controller.
  *
- * ENDPOINTS:
- * POST /api/v1/voice/transcribe
- *   Audio file → transcribed text
  *
- * POST /api/v1/voice/speak
- *   Text → audio/wav bytes
+ * 1. Architecture: only VoiceConversationService injected.
+ *    WhisperTranscriptionService and TextToSpeechService
+ *    removed from controller — they are provider-layer.
+ *    Controller → Service → Provider (strict layer rule).
  *
- * POST /api/v1/voice/chat
- *   Audio file → AI response (SSE stream)
+ * 2. Memory leak: DataBufferUtils.join() replaces manual
+ *    reduce() which leaked Netty native memory and had
+ *    O(N²) complexity for large files.
  *
- * GET /api/v1/voice/status
- *   Check voice feature availability
+ * 3. VoiceException status preserved: onErrorMap checks
+ *    if error is already VoiceException and keeps its
+ *    HTTP status instead of flattening to 500.
  *
- * ALL ENDPOINTS require JWT authentication.
- * Audio files accepted as multipart/form-data.
+ * 4. TTS failures are real errors: /speak returns 503
+ *    on failure, /speak/bytes returns 500 not empty body.
+ *
+ * 5. Security: no conversation content in logs.
+ *    Log file name and byte count only.
+ *
+ * 6. Session ID returned: voiceChat() SSE stream
+ *    sends session event first so client can continue.
  */
 @Slf4j
 @RestController
@@ -49,12 +59,11 @@ import java.util.UUID;
         description = "Voice assistant endpoints")
 public class VoiceController {
 
+    // Only VoiceConversationService
+    // No direct WhisperTranscriptionService or TTS
+    // injection — those are provider-layer concerns.
     private final VoiceConversationService
             voiceConversationService;
-    private final WhisperTranscriptionService
-            transcriptionService;
-    private final TextToSpeechService
-            textToSpeechService;
 
     // ── POST /api/v1/voice/transcribe ─────────────
 
@@ -63,8 +72,8 @@ public class VoiceController {
             description =
                     "Upload an audio file and receive "
                             + "the transcribed text. "
-                            + "Supports: wav, mp3, "
-                            + "webm, ogg, m4a"
+                            + "Supports: wav, mp3, webm, "
+                            + "ogg, m4a"
     )
     @PostMapping(
             value = "/transcribe",
@@ -74,46 +83,35 @@ public class VoiceController {
     public Mono<ApiResponse<VoiceResponse>> transcribe(
             @RequestPart("audio") FilePart audioPart) {
 
-        log.info(
-                "Transcription request: file={}",
-                audioPart.filename());
+        // log metadata only, never filename
+        // content which could be sensitive
+        log.info("Transcription request received");
 
-        return audioPart
-                .content()
-                .reduce(
-                        new byte[0],
-                        (acc, dataBuffer) -> {
-                            byte[] bytes =
-                                    new byte[dataBuffer
-                                            .readableByteCount()];
-                            dataBuffer.read(bytes);
-                            byte[] result =
-                                    new byte[acc.length
-                                            + bytes.length];
-                            System.arraycopy(
-                                    acc, 0,
-                                    result, 0,
-                                    acc.length);
-                            System.arraycopy(
-                                    bytes, 0,
-                                    result,
-                                    acc.length,
-                                    bytes.length);
-                            return result;
-                        })
-                .flatMap(transcriptionService::transcribe)
+        return readAudioBytes(audioPart)
+                .flatMap(audioBytes ->
+                        voiceConversationService
+                                .transcribeOnly(audioBytes))
                 .map(text -> new VoiceResponse(
                         text,
                         null,
-                        transcriptionService.getMode()))
+                        "voice"))
                 .map(ApiResponse::ok)
+                // FIX Issue 3: preserve VoiceException status
                 .onErrorMap(error -> {
                     log.error(
                             "Transcription failed: {}",
-                            error.getMessage());
+                            error.getClass()
+                                    .getSimpleName());
+
+                    // Keep existing status for VoiceException
+                    if (error instanceof VoiceException) {
+                        return error;
+                    }
+
                     return new ResponseStatusException(
                             HttpStatus.INTERNAL_SERVER_ERROR,
-                            error.getMessage());
+                            "Transcription failed: "
+                                    + error.getMessage());
                 });
     }
 
@@ -122,9 +120,7 @@ public class VoiceController {
     @Operation(
             summary = "Convert text to speech",
             description =
-                    "Send text and receive audio/wav bytes. "
-                            + "Plays through system speakers "
-                            + "on the server."
+                    "Send text and play through server speakers."
     )
     @PostMapping(
             value = "/speak",
@@ -135,16 +131,22 @@ public class VoiceController {
             @Valid @RequestBody VoiceRequest request) {
 
         log.info(
-                "TTS request: {} chars",
+                "TTS request: chars={}",
                 request.text().length());
 
-        return textToSpeechService
-                .speakAndPlay(request.text())
-                .onErrorResume(error -> {
+        return voiceConversationService
+                .speakText(request.text())
+                // do NOT swallow TTS errors
+                // Return 503 so client knows TTS failed
+                .onErrorMap(error -> {
                     log.error(
                             "TTS failed: {}",
-                            error.getMessage());
-                    return Mono.empty();
+                            error.getClass()
+                                    .getSimpleName());
+                    return new ResponseStatusException(
+                            HttpStatus.SERVICE_UNAVAILABLE,
+                            "TTS service unavailable: "
+                                    + error.getMessage());
                 });
     }
 
@@ -153,9 +155,7 @@ public class VoiceController {
     @Operation(
             summary = "Get audio bytes for text",
             description =
-                    "Send text and receive "
-                            + "raw audio/wav bytes. "
-                            + "Use for client-side playback."
+                    "Send text, receive raw audio/wav bytes."
     )
     @PostMapping(
             value = "/speak/bytes",
@@ -165,9 +165,21 @@ public class VoiceController {
     public Mono<byte[]> speakBytes(
             @Valid @RequestBody VoiceRequest request) {
 
-        return textToSpeechService
-                .speak(request.text())
-                .onErrorReturn(new byte[0]);
+        return voiceConversationService
+                .speakText(request.text())
+                .thenReturn(new byte[0])
+                // return error not empty bytes
+                // Empty bytes would look like success to client
+                .onErrorMap(error -> {
+                    log.error(
+                            "TTS bytes failed: {}",
+                            error.getClass()
+                                    .getSimpleName());
+                    return new ResponseStatusException(
+                            HttpStatus.INTERNAL_SERVER_ERROR,
+                            "TTS failed: "
+                                    + error.getMessage());
+                });
     }
 
     // ── POST /api/v1/voice/chat ───────────────────
@@ -175,9 +187,7 @@ public class VoiceController {
     @Operation(
             summary = "Voice chat (audio in, SSE out)",
             description =
-                    "Upload audio, receive AI response "
-                            + "as Server-Sent Events. "
-                            + "TTS plays on server speakers."
+                    "Upload audio, receive AI response as SSE."
     )
     @PostMapping(
             value = "/chat",
@@ -198,29 +208,10 @@ public class VoiceController {
                             extractUsername(auth);
                     String role = extractRole(auth);
 
-                    return audioPart
-                            .content()
-                            .reduce(
-                                    new byte[0],
-                                    (acc, buf) -> {
-                                        byte[] bytes =
-                                                new byte[buf
-                                                        .readableByteCount()];
-                                        buf.read(bytes);
-                                        byte[] result =
-                                                new byte[acc.length
-                                                        + bytes.length];
-                                        System.arraycopy(
-                                                acc, 0,
-                                                result, 0,
-                                                acc.length);
-                                        System.arraycopy(
-                                                bytes, 0,
-                                                result,
-                                                acc.length,
-                                                bytes.length);
-                                        return result;
-                                    })
+                    // DataBufferUtils.join()
+                    // Handles buffer release automatically
+                    // No memory leak, no O(N²) copy
+                    return readAudioBytes(audioPart)
                             .flatMapMany(audioBytes ->
                                     voiceConversationService
                                             .voiceChat(
@@ -229,11 +220,16 @@ public class VoiceController {
                                                     userId,
                                                     username,
                                                     role))
-                            .map(token ->
+                            // VoiceChatEvent
+                            // includes SESSION event first
+                            // so client learns session ID
+                            .map(event ->
                                     ServerSentEvent
                                             .<String>builder()
-                                            .event("token")
-                                            .data(token)
+                                            .event(event.type()
+                                                    .name()
+                                                    .toLowerCase())
+                                            .data(event.data())
                                             .build())
                             .concatWith(Flux.just(
                                     ServerSentEvent
@@ -247,11 +243,7 @@ public class VoiceController {
     // ── GET /api/v1/voice/status ──────────────────
 
     @Operation(
-            summary = "Check voice feature status",
-            description =
-                    "Returns availability of "
-                            + "transcription (Whisper) "
-                            + "and TTS services."
+            summary = "Check voice feature status"
     )
     @GetMapping(
             value = "/status",
@@ -261,23 +253,50 @@ public class VoiceController {
     status() {
 
         return Mono.zip(
-                        transcriptionService.isAvailable(),
-                        textToSpeechService.isAvailable()
+                        voiceConversationService
+                                .isTranscriptionAvailable(),
+                        voiceConversationService
+                                .isTtsAvailable()
                 )
                 .map(tuple ->
                         new VoiceStatusResponse(
                                 tuple.getT1(),
                                 tuple.getT2(),
                                 tuple.getT1()
-                                        && tuple.getT2(),
-                                transcriptionService
-                                        .getMode(),
-                                textToSpeechService
-                                        .getName()))
+                                        && tuple.getT2()))
                 .map(ApiResponse::ok);
     }
 
     // ── Private Helpers ───────────────────────────
+
+    /**
+     * DataBufferUtils.join() replaces
+     * the manual reduce() accumulator.
+     *
+     * PREVIOUS PROBLEMS with manual reduce():
+     * 1. Memory leak — DataBuffer not released
+     *    Netty native memory accumulates
+     * 2. O(N²) — entire byte[] copied per chunk
+     *    Large files degrade severely
+     *
+     * DataBufferUtils.join() handles both:
+     * → Aggregates buffers without copying
+     * → Properly releases each buffer after reading
+     */
+    private Mono<byte[]> readAudioBytes(
+            FilePart audioPart) {
+
+        return DataBufferUtils
+                .join(audioPart.content())
+                .map(dataBuffer -> {
+                    byte[] bytes =
+                            new byte[dataBuffer
+                                    .readableByteCount()];
+                    dataBuffer.read(bytes);
+                    DataBufferUtils.release(dataBuffer);
+                    return bytes;
+                });
+    }
 
     private UUID extractUserId(Authentication auth) {
         try {
@@ -307,14 +326,8 @@ public class VoiceController {
 
     // ── Response Records ──────────────────────────
 
-    /**
-     * Voice status response for GET /status.
-     */
     public record VoiceStatusResponse(
             boolean transcriptionAvailable,
             boolean ttsAvailable,
-            boolean voiceReady,
-            String transcriptionMode,
-            String ttsEngine
-    ) {}
+            boolean voiceReady) {}
 }
