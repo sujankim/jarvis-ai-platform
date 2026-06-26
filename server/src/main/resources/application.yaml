@@ -202,6 +202,17 @@ jarvis:
       # macOS:   say command
       # Linux:   espeak or text2wave
       enabled: true
+      # Voice gender/name selection
+      # Windows: "Microsoft Zira Desktop" (female)
+      #          "Microsoft David Desktop" (male)
+      #          "Microsoft Mark Desktop" (male)
+      # macOS:   "Samantha" (female), "Alex" (male)
+      #          "Victoria" (female), "Tom" (male)
+      # Linux:   "en+f3" (female), "en+f4" (female)
+      #          "en" (male default)
+      voice: ${JARVIS_VOICE_NAME:}
+      # Speed: 1.0 = normal, 1.5 = faster, 0.8 = slower
+      speed: ${JARVIS_VOICE_SPEED:1.0}
 
 # ═══════════════════════════════════════════════════
 # ACTUATOR

@@ -182,4 +182,20 @@ public record JarvisProperties(
             Duration performanceSummaryInterval
 
     ) {}
+
+    public record TtsProperties(
+
+            @DefaultValue("true")
+            boolean enabled,
+
+            // Voice name — OS specific
+            // Empty = use system default voice
+            @DefaultValue("")
+            String voice,
+
+            // Speed multiplier
+            // 1.0 = normal, 1.5 = faster, 0.8 = slower
+            @DefaultValue("1.0")
+            double speed
+    ) {}
 }
