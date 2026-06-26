@@ -7,19 +7,20 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * PHASE 5 UPDATE: Voice selection support.
+ * Text-to-speech using OS native commands.
  *
- * Users can now configure voice name + speed
- * via environment variables or application.yml.
- *
- * JARVIS_VOICE_NAME=Microsoft Zira Desktop  (female Windows)
- * JARVIS_VOICE_NAME=Samantha                (female macOS)
- * JARVIS_VOICE_NAME=en+f3                   (female Linux)
- * JARVIS_VOICE_SPEED=1.2                    (faster)
+ * Supports Windows, macOS, and Linux.
+ * Voice name and speed configurable via:
+ *   jarvis.voice.tts.voice
+ *   jarvis.voice.tts.speed
  */
 @Slf4j
 @Service
@@ -27,6 +28,8 @@ public class SystemTextToSpeechService
         implements TextToSpeechService {
 
     private static final int TIMEOUT_SECONDS = 30;
+    private static final int MAC_DEFAULT_WPM = 175;
+    private static final int LINUX_DEFAULT_WPM = 175;
 
     private static final String OS =
             System.getProperty("os.name")
@@ -48,15 +51,17 @@ public class SystemTextToSpeechService
             @Value("${jarvis.voice.tts.speed:1.0}")
             double voiceSpeed) {
 
-        this.voiceName = voiceName;
+        this.voiceName = voiceName != null
+                ? voiceName : "";
         this.voiceSpeed = voiceSpeed;
 
         log.info(
                 "SystemTextToSpeechService: "
                         + "os={} voice='{}' speed={}",
                 getName(),
-                voiceName.isBlank()
-                        ? "default" : voiceName,
+                this.voiceName.isBlank()
+                        ? "system-default"
+                        : this.voiceName,
                 voiceSpeed);
     }
 
@@ -104,7 +109,8 @@ public class SystemTextToSpeechService
         return Mono.fromCallable(() -> {
                     if (IS_WINDOWS) {
                         return isCommandAvailable(
-                                "powershell", "-Command",
+                                "powershell",
+                                "-Command",
                                 "Write-Host ok");
                     } else if (IS_MAC) {
                         return isCommandAvailable(
@@ -113,9 +119,11 @@ public class SystemTextToSpeechService
                         return isCommandAvailable(
                                 "espeak", "--version")
                                 || isCommandAvailable(
-                                "text2wave", "--version")
+                                "text2wave",
+                                "--version")
                                 || isCommandAvailable(
-                                "festival", "--version");
+                                "festival",
+                                "--version");
                     }
                     return false;
                 })
@@ -132,7 +140,7 @@ public class SystemTextToSpeechService
         return "system-unknown";
     }
 
-    // ── Private Helpers ───────────────────────────
+    // ── Audio generation (speak() path) ──────────
 
     private byte[] generateAudio(String text)
             throws Exception {
@@ -143,13 +151,18 @@ public class SystemTextToSpeechService
 
         try {
             if (IS_WINDOWS) {
-                generateWindowsAudio(text, tempFile);
+                runProcess(new ProcessBuilder(
+                        "powershell", "-Command",
+                        buildWindowsCommand(
+                                sanitizeForShell(text),
+                                tempFile.getAbsolutePath()
+                                        .replace("\\", "\\\\"))));
+
             } else if (IS_MAC) {
                 generateMacAudio(text, tempFile);
+
             } else if (IS_LINUX) {
                 generateLinuxAudio(text, tempFile);
-            } else {
-                return new byte[0];
             }
 
             if (tempFile.exists()
@@ -160,47 +173,58 @@ public class SystemTextToSpeechService
             return new byte[0];
 
         } finally {
-            tempFile.delete();
+            // deleteOnExit handles cleanup at JVM exit
+            // explicit delete for immediate cleanup
+            if (tempFile.exists()) {
+                boolean deleted = tempFile.delete();
+                if (!deleted) {
+                    log.debug(
+                            "Temp TTS file will be "
+                                    + "deleted on JVM exit");
+                }
+            }
         }
     }
+
+    // ── Playback (speakAndPlay() path) ────────────
 
     private void playText(String text)
             throws Exception {
 
         String safe = sanitizeForShell(text);
-        Process process;
 
         if (IS_WINDOWS) {
-            process = new ProcessBuilder(
+            runProcess(new ProcessBuilder(
                     "powershell", "-Command",
-                    buildWindowsPlayCommand(safe))
-                    .start();
+                    buildWindowsCommand(safe, null)));
 
         } else if (IS_MAC) {
-            process = buildMacPlayProcess(safe);
+            // FIX: buildMacArgs() returns List<String>
+            // new ProcessBuilder(List) — then .start()
+            runProcess(new ProcessBuilder(
+                    buildMacArgs(safe, null)));
 
         } else if (IS_LINUX) {
-            process = buildLinuxPlayProcess(safe);
+            playLinuxText(safe);
 
         } else {
-            log.warn("No TTS for OS: {}", OS);
-            return;
-        }
-
-        boolean finished = process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            log.warn("TTS playback timed out");
+            log.warn(
+                    "No TTS available for OS: {}",
+                    OS);
         }
     }
 
+    // ── Windows ───────────────────────────────────
+
     /**
-     * Build Windows PowerShell TTS command.
-     * Includes voice selection if configured.
+     * Build Windows PowerShell TTS command string.
+     * Shared by both speak() and speakAndPlay() paths.
+     *
+     * @param safe       sanitized text
+     * @param outputPath null = play, non-null = save WAV
      */
-    private String buildWindowsPlayCommand(
-            String safe) {
+    private String buildWindowsCommand(
+            String safe, String outputPath) {
 
         StringBuilder cmd = new StringBuilder(
                 "Add-Type -AssemblyName System.Speech; "
@@ -208,145 +232,83 @@ public class SystemTextToSpeechService
                         + "System.Speech.Synthesis"
                         + ".SpeechSynthesizer; ");
 
-        // Voice selection
         if (!voiceName.isBlank()) {
             cmd.append("$s.SelectVoice('")
                     .append(voiceName)
                     .append("'); ");
         }
 
-        // Speed (Rate: -10 slowest, 10 fastest)
-        // Convert our multiplier to Rate scale
         if (voiceSpeed != 1.0) {
-            int rate = (int) ((voiceSpeed - 1.0) * 5);
-            rate = Math.max(-5, Math.min(5, rate));
+            // PowerShell Rate: -10 (slow) to 10 (fast)
+            int rate = Math.clamp(
+                    (int) ((voiceSpeed - 1.0) * 5),
+                    -5, 5);
             cmd.append("$s.Rate = ")
                     .append(rate)
                     .append("; ");
+        }
+
+        if (outputPath != null) {
+            cmd.append("$s.SetOutputToWaveFile('")
+                    .append(outputPath)
+                    .append("'); ");
         }
 
         cmd.append("$s.Speak('")
                 .append(safe)
-                .append("')");
+                .append("'); ");
+
+        if (outputPath != null) {
+            cmd.append(
+                    "$s.SetOutputToDefaultAudioDevice()");
+        }
 
         return cmd.toString();
     }
 
-    /**
-     * Build macOS say command with voice + speed.
-     */
-    private Process buildMacPlayProcess(String safe)
-            throws Exception {
-
-        ProcessBuilder pb;
-
-        if (!voiceName.isBlank()) {
-            pb = new ProcessBuilder(
-                    "say", "-v", voiceName, safe);
-        } else {
-            pb = new ProcessBuilder("say", safe);
-        }
-
-        // macOS say rate: words per minute
-        // Default ~175wpm, 1.5x = 262wpm
-        if (voiceSpeed != 1.0) {
-            int wpm = (int) (175 * voiceSpeed);
-            pb = new ProcessBuilder(
-                    "say",
-                    "-v", voiceName.isBlank()
-                    ? "Samantha" : voiceName,
-                    "-r", String.valueOf(wpm),
-                    safe);
-        }
-
-        return pb.start();
-    }
+    // ── macOS ─────────────────────────────────────
 
     /**
-     * Build Linux espeak command with voice.
+     *  Returns List<String> not ProcessBuilder.
+     * Callers do: new ProcessBuilder(buildMacArgs(...))
+     * Fixes "Incompatible types" compile error.
+     *
+     * no longer hardcodes "Samantha".
+     * Empty voiceName = system default preserved.
+     * Speed applied in BOTH speak() + speakAndPlay().
+     *
+     * @param safe       sanitized text
+     * @param outputPath null = play, non-null = AIFF file
      */
-    private Process buildLinuxPlayProcess(String safe)
-            throws Exception {
+    private List<String> buildMacArgs(
+            String safe, String outputPath) {
 
-        if (isCommandAvailable(
-                "espeak", "--version")) {
+        List<String> args = new ArrayList<>();
+        args.add("say");
 
-            ProcessBuilder pb = new ProcessBuilder();
-
-            if (!voiceName.isBlank()) {
-                pb.command("espeak",
-                        "-v", voiceName, safe);
-            } else {
-                pb.command("espeak", safe);
-            }
-
-            // espeak speed in words per minute
-            if (voiceSpeed != 1.0) {
-                int wpm = (int) (175 * voiceSpeed);
-                pb.command("espeak",
-                        "-v", voiceName.isBlank()
-                                ? "en" : voiceName,
-                        "-s", String.valueOf(wpm),
-                        safe);
-            }
-
-            return pb.start();
-
-        } else {
-            // festival fallback
-            return new ProcessBuilder(
-                    "festival", "--tts")
-                    .start();
-        }
-    }
-
-    private void generateWindowsAudio(
-            String text, File outputFile)
-            throws Exception {
-
-        String safe = sanitizeForShell(text);
-        String path = outputFile
-                .getAbsolutePath()
-                .replace("\\", "\\\\");
-
-        StringBuilder cmd = new StringBuilder(
-                "Add-Type -AssemblyName System.Speech; "
-                        + "$s = New-Object "
-                        + "System.Speech.Synthesis"
-                        + ".SpeechSynthesizer; ");
-
+        // Only add -v when explicitly configured
+        // Empty voiceName = system default voice
         if (!voiceName.isBlank()) {
-            cmd.append("$s.SelectVoice('")
-                    .append(voiceName)
-                    .append("'); ");
+            args.add("-v");
+            args.add(voiceName);
         }
 
+        // Apply speed in both paths
         if (voiceSpeed != 1.0) {
-            int rate = (int) ((voiceSpeed - 1.0) * 5);
-            rate = Math.max(-5, Math.min(5, rate));
-            cmd.append("$s.Rate = ")
-                    .append(rate)
-                    .append("; ");
+            int wpm = (int) (MAC_DEFAULT_WPM
+                    * voiceSpeed);
+            args.add("-r");
+            args.add(String.valueOf(wpm));
         }
 
-        cmd.append("$s.SetOutputToWaveFile('")
-                .append(path)
-                .append("'); ")
-                .append("$s.Speak('")
-                .append(safe)
-                .append("'); ")
-                .append("$s.SetOutputToDefaultAudioDevice()");
-
-        Process process = new ProcessBuilder(
-                "powershell", "-Command",
-                cmd.toString())
-                .start();
-
-        if (!process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            process.destroyForcibly();
-            log.warn("Windows TTS timed out");
+        if (outputPath != null) {
+            args.add("-o");
+            args.add(outputPath);
         }
+
+        args.add(safe);
+
+        return args;
     }
 
     private void generateMacAudio(
@@ -358,29 +320,26 @@ public class SystemTextToSpeechService
         aiffFile.deleteOnExit();
 
         try {
-            ProcessBuilder pb;
+            // FIX: buildMacArgs() returns List<String>
+            // new ProcessBuilder(List) — correct type
+            Process sayProcess =
+                    new ProcessBuilder(
+                            buildMacArgs(
+                                    text,
+                                    aiffFile.getAbsolutePath()))
+                            .start();
 
-            if (!voiceName.isBlank()) {
-                pb = new ProcessBuilder(
-                        "say",
-                        "-v", voiceName,
-                        "-o", aiffFile.getAbsolutePath(),
-                        text);
-            } else {
-                pb = new ProcessBuilder(
-                        "say",
-                        "-o", aiffFile.getAbsolutePath(),
-                        text);
-            }
-
-            Process sayProcess = pb.start();
             if (!sayProcess.waitFor(
-                    TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS)) {
                 sayProcess.destroyForcibly();
+                log.warn("macOS say timed out");
                 return;
             }
 
-            if (aiffFile.exists()) {
+            if (aiffFile.exists()
+                    && aiffFile.length() > 0) {
+
                 Process convert =
                         new ProcessBuilder(
                                 "afconvert",
@@ -389,63 +348,158 @@ public class SystemTextToSpeechService
                                 aiffFile.getAbsolutePath(),
                                 outputFile.getAbsolutePath())
                                 .start();
+
                 if (!convert.waitFor(
                         TIMEOUT_SECONDS,
                         TimeUnit.SECONDS)) {
                     convert.destroyForcibly();
+                    log.warn("afconvert timed out");
                 }
             }
 
         } finally {
-            aiffFile.delete();
+            if (aiffFile.exists()) {
+                boolean deleted = aiffFile.delete();
+                if (!deleted) {
+                    log.debug(
+                            "AIFF file will be "
+                                    + "deleted on JVM exit");
+                }
+            }
         }
+    }
+
+    // ── Linux ─────────────────────────────────────
+
+    /**
+     * buildLinuxArgs() extracted method.
+     * Removes duplication between generateLinuxAudio()
+     * and playLinuxText() (was 12 lines duplicated).
+     *
+     * speed applied in BOTH paths via -s flag.
+     *
+     * @param safe       sanitized text
+     * @param outputPath null = play, non-null = WAV file
+     */
+    private List<String> buildEspeakArgs(
+            String safe, String outputPath) {
+
+        String voice = voiceName.isBlank()
+                ? "en" : voiceName;
+
+        List<String> args = new ArrayList<>();
+        args.add("espeak");
+        args.add("-v");
+        args.add(voice);
+
+        // Apply speed in both paths
+        if (voiceSpeed != 1.0) {
+            int wpm = (int) (LINUX_DEFAULT_WPM
+                    * voiceSpeed);
+            args.add("-s");
+            args.add(String.valueOf(wpm));
+        }
+
+        if (outputPath != null) {
+            args.add("-w");
+            args.add(outputPath);
+        }
+
+        args.add(safe);
+
+        return args;
     }
 
     private void generateLinuxAudio(
             String text, File outputFile)
             throws Exception {
 
-        Process process;
+        String safe = sanitizeForShell(text);
 
         if (isCommandAvailable(
                 "espeak", "--version")) {
 
-            String voice = voiceName.isBlank()
-                    ? "en" : voiceName;
-
-            process = new ProcessBuilder(
-                    "espeak",
-                    "-v", voice,
-                    "-w", outputFile.getAbsolutePath(),
-                    text)
-                    .start();
+            runProcess(new ProcessBuilder(
+                    buildEspeakArgs(
+                            safe,
+                            outputFile.getAbsolutePath())));
 
         } else if (isCommandAvailable(
                 "text2wave", "--version")) {
-            process = new ProcessBuilder(
+
+            runProcess(new ProcessBuilder(
                     "bash", "-c",
                     "echo '"
-                            + sanitizeForShell(text)
+                            + safe
                             + "' | text2wave -o "
-                            + outputFile.getAbsolutePath())
-                    .start();
+                            + outputFile
+                            .getAbsolutePath()));
+
         } else {
-            process = new ProcessBuilder(
+            // Festival Scheme: writes WAV directly
+            runProcess(new ProcessBuilder(
                     "bash", "-c",
                     "echo '(voice_kal_diphone) "
                             + "(utt.save.wave "
                             + "(SayText \""
-                            + sanitizeForShell(text)
+                            + safe
                             + "\") \""
                             + outputFile.getAbsolutePath()
-                            + "\")' | festival")
-                    .start();
+                            + "\")' | festival"));
         }
+    }
+
+    private void playLinuxText(String safe)
+            throws Exception {
+
+        if (isCommandAvailable(
+                "espeak", "--version")) {
+
+            // FIX: shared buildEspeakArgs()
+            // no outputPath = play mode
+            runProcess(new ProcessBuilder(
+                    buildEspeakArgs(safe, null)));
+
+        } else {
+            // FIX Issue 3: Festival reads from stdin
+            // ProcessBuilder("festival","--tts")
+            // then write text to stdin
+            Process festival =
+                    new ProcessBuilder(
+                            "festival", "--tts")
+                            .start();
+
+            try (OutputStream stdin =
+                         festival.getOutputStream()) {
+                stdin.write(safe.getBytes());
+                stdin.flush();
+            }
+
+            if (!festival.waitFor(
+                    TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS)) {
+                festival.destroyForcibly();
+                log.warn("Festival timed out");
+            }
+        }
+    }
+
+    // ── Utilities ─────────────────────────────────
+
+    /**
+     * Run a ProcessBuilder and wait for completion.
+     * Destroys process if timeout exceeded.
+     * Shared by all three OS paths.
+     */
+    private void runProcess(ProcessBuilder pb)
+            throws Exception {
+
+        Process process = pb.start();
 
         if (!process.waitFor(
                 TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             process.destroyForcibly();
-            log.warn("Linux TTS timed out");
+            log.warn("TTS process timed out");
         }
     }
 

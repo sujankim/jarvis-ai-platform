@@ -21,165 +21,143 @@ public record JarvisProperties(
         CliProperties cli,
 
         @DefaultValue
-        ObservabilityProperties observability
+        ObservabilityProperties observability,
+
+        @DefaultValue
+        VoiceProperties voice
+
 ) {
 
     public record SecurityProperties(
-
             @DefaultValue
             JwtProperties jwt,
-
             @DefaultValue
             RateLimitingProperties rateLimiting,
-
             @DefaultValue
             Argon2Properties argon2
-    ){}
+    ) {}
 
     public record JwtProperties(
-
             @DefaultValue("dev-secret-key-change-in-production-min-32-chars")
             String secret,
-
             @DefaultValue("15m")
             Duration accessTokenExpiry,
-
             @DefaultValue("7d")
             Duration refreshTokenExpiry,
-
             @DefaultValue("jarvis-ai-platform")
             String issuer
-
     ) {}
 
     public record RateLimitingProperties(
-
             @DefaultValue("true")
             boolean enabled,
-
             @DefaultValue("30")
             int chatRequestsPerMinute,
-
             @DefaultValue("5")
             int authAttemptsPerMinute,
-
             @DefaultValue("10")
             int adminRequestsPerMinute
-
     ) {}
 
     public record Argon2Properties(
-
             @DefaultValue("65536")
             int memory,
-
             @DefaultValue("3")
             int iterations,
-
             @DefaultValue("1")
             int parallelism,
-
             @DefaultValue("32")
             int hashLength,
-
             @DefaultValue("16")
             int saltLength
-
     ) {}
 
     public record AiProperties(
-
             @DefaultValue("ollama")
             String primaryProvider,
-
             @DefaultValue("gemini")
             String fallbackProvider,
-
             @DefaultValue("3s")
             Duration providerHealthCheckTimeout,
-
             @DefaultValue
             StreamingProperties streaming,
-
             @DefaultValue
             ContextProperties context,
-
             @DefaultValue
             GuardrailProperties guardrails
-
     ) {}
 
     public record StreamingProperties(
-
             @DefaultValue("120s")
             Duration timeout,
-
             @DefaultValue("1")
             int bufferSize
-
     ) {}
 
     public record ContextProperties(
-
             @DefaultValue("8000")
             int maxTokens,
-
             @DefaultValue("2000")
             int reserveForResponse,
-
             @DefaultValue("25")
             int summarizeThreshold,
-
             @DefaultValue("20")
             int summarizeBatchSize,
-
             @DefaultValue("6")
             int minMessagesToKeep
-
     ) {}
 
     public record GuardrailProperties(
-
             @DefaultValue("10000")
             int maxInputLength,
-
             @DefaultValue("true")
             boolean injectionDetectionEnabled
-
     ) {}
 
     public record CliProperties(
-
             @DefaultValue("${user.home}/.jarvis")
             String configDir,
-
             @DefaultValue("${user.home}/.jarvis/logs")
             String logDir,
-
             @DefaultValue("${user.home}/.jarvis/auth.json")
             String tokensFile,
-
             @DefaultValue("${user.home}/.jarvis/session.json")
             String sessionFile,
-
             @DefaultValue("${user.home}/.jarvis/preferences.json")
             String preferencesFile
-
     ) {}
 
     public record ObservabilityProperties(
-
             @DefaultValue("true")
             boolean logAiRequests,
-
             @DefaultValue("true")
             boolean logTokenUsage,
-
             @DefaultValue("true")
             boolean logProviderSelection,
-
             @DefaultValue("5m")
             Duration performanceSummaryInterval
+    ) {}
+
+    public record VoiceProperties(
+
+            @DefaultValue
+            WhisperProperties whisper,
+
+            @DefaultValue
+            TtsProperties tts
+
+    ) {}
+
+    public record WhisperProperties(
+
+            @DefaultValue("https://api.groq.com/openai/v1")
+            String baseUrl,
+
+            @DefaultValue("")
+            String apiKey,
+
+            @DefaultValue("whisper-large-v3-turbo")
+            String model
 
     ) {}
 
@@ -189,7 +167,10 @@ public record JarvisProperties(
             boolean enabled,
 
             // Voice name — OS specific
-            // Empty = use system default voice
+            // Empty string = use system default voice
+            // Windows: "Microsoft Zira Desktop"
+            // macOS:   "Samantha"
+            // Linux:   "en+f3"
             @DefaultValue("")
             String voice,
 
@@ -197,5 +178,6 @@ public record JarvisProperties(
             // 1.0 = normal, 1.5 = faster, 0.8 = slower
             @DefaultValue("1.0")
             double speed
+
     ) {}
 }
