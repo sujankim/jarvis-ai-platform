@@ -50,17 +50,17 @@ It is a **modular AI orchestration platform** that runs entirely on your own mac
 
 ---
 
-# 📈 Current Status
+## 📈 Current Status
 
-| Phase   | Version | Feature             | Status          |
-| ------- | ------- | ------------------- | --------------- |
-| Phase 1 | v0.1.0  | AI Chat + CLI + JWT | ✅ Released      |
-| Phase 2 | v0.2.0  | Memory System       | ✅ Core Complete |
-| Phase 3 | v0.3.0  | RAG Engine          | ✅ Core Complete |
-| Phase 4 | v0.4.0  | Tool Engine         | ✅ Core Complete |
-| Phase 5 | v0.5.0  | Voice Assistant     | 🔨 In Progress  |
-| Phase 6 | v0.6.0  | Agent System        | 📋 Planned      |
-| Phase 7 | v1.0.0  | Web UI              | 📋 Planned      |
+| Phase   | Version | Feature              | Status            |
+| ------- | ------- | -------------------- | ----------------- |
+| Phase 1 | v0.1.0  | AI Chat + CLI + JWT  | ✅ Released        |
+| Phase 2 | v0.2.0  | Memory System        | ✅ Core Complete   |
+| Phase 3 | v0.3.0  | RAG Engine           | ✅ Core Complete   |
+| Phase 4 | v0.4.0  | Tool Engine          | ✅ Core Complete   |
+| Phase 5 | v0.5.0  | Voice Assistant      | ✅ Core Complete   |
+| Phase 6 | v0.6.0  | Agent System         | 📋 Next           |
+| Phase 7 | v1.0.0  | Web UI               | 📋 Planned        |
 
 ---
 
@@ -93,8 +93,11 @@ It is a **modular AI orchestration platform** that runs entirely on your own mac
 | CLI memory commands               | 📋     | v0.2.0 |
 | Document REST API                 | 📋     | v0.3.0 |
 | CLI document commands             | 📋     | v0.3.0 |
-| Voice transcription (Whisper)     | 🔨     | v0.5.0 |
-| Voice chat loop                   | 🔨     | v0.5.0 |
+| Voice transcription (Whisper)     | ✅      | v0.5.0 |
+| Text-to-speech (cross-platform)   | ✅      | v0.5.0 |
+| Voice chat loop                   | ✅      | v0.5.0 |
+| Voice selection + speed control   | ✅      | v0.5.0 |
+| MCP Server (external clients)     | ✅      | v0.4.0 |
 
 ---
 
@@ -301,8 +304,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the setup guide.
 
 # 📝 Articles
 
-* Building a Local-First AI Assistant with Spring Boot 4 — Dev.to
-* Jarvis AI Platform: Building Long-Term Memory with pgvector — Medium
+* [Building a Local-First AI Assistant with Spring Boot 4 — Dev.to](https://dev.to/sujankim/building-a-local-first-ai-assistant-with-spring-boot-4-and-spring-ai-20-6ci)
+* [Jarvis AI Platform: Building Long-Term Memory with pgvector — Medium](https://medium.com/@sujan.lamichhane32/jarvis-ai-platform-building-long-term-memory-with-pgvector-and-spring-ai-c114b79dceda)
+* [Jarvis AI Platform: Implementing Semantic Memory Retrieval with pgvector - Dev.to](https://dev.to/sujankim/jarvis-ai-platform-implementing-semantic-memory-retrieval-with-pgvector-30a1)
 
 ---
 

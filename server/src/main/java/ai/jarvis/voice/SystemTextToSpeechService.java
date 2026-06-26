@@ -1,28 +1,26 @@
 package ai.jarvis.voice;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Text-to-speech using OS native commands.
  *
- * FIXES (CodeRabbit):
- * 1. Process leak fix: destroyForcibly() on timeout
- *    in ALL generate* methods (not just playText).
- *    Previously generate* methods ignored waitFor
- *    return value — timed-out processes leaked.
- *
- * 2. Linux file output fix: use text2wave
- *    festival --tts is for PLAYBACK, not file output.
- *    text2wave -o <file> correctly writes WAV.
- *    Without this: generateLinuxAudio() produced
- *    empty bytes on festival-only systems.
+ * Supports Windows, macOS, and Linux.
+ * Voice name and speed configurable via:
+ *   jarvis.voice.tts.voice
+ *   jarvis.voice.tts.speed
  */
 @Slf4j
 @Service
@@ -30,6 +28,8 @@ public class SystemTextToSpeechService
         implements TextToSpeechService {
 
     private static final int TIMEOUT_SECONDS = 30;
+    private static final int MAC_DEFAULT_WPM = 175;
+    private static final int LINUX_DEFAULT_WPM = 175;
 
     private static final String OS =
             System.getProperty("os.name")
@@ -37,13 +37,33 @@ public class SystemTextToSpeechService
 
     private static final boolean IS_WINDOWS =
             OS.contains("win");
-
     private static final boolean IS_MAC =
             OS.contains("mac");
-
     private static final boolean IS_LINUX =
-            OS.contains("nux")
-                    || OS.contains("nix");
+            OS.contains("nux") || OS.contains("nix");
+
+    private final String voiceName;
+    private final double voiceSpeed;
+
+    public SystemTextToSpeechService(
+            @Value("${jarvis.voice.tts.voice:}")
+            String voiceName,
+            @Value("${jarvis.voice.tts.speed:1.0}")
+            double voiceSpeed) {
+
+        this.voiceName = voiceName != null
+                ? voiceName : "";
+        this.voiceSpeed = voiceSpeed;
+
+        log.info(
+                "SystemTextToSpeechService: "
+                        + "os={} voice='{}' speed={}",
+                getName(),
+                this.voiceName.isBlank()
+                        ? "system-default"
+                        : this.voiceName,
+                voiceSpeed);
+    }
 
     @Override
     public Mono<byte[]> speak(String text) {
@@ -57,7 +77,7 @@ public class SystemTextToSpeechService
                         Schedulers.boundedElastic())
                 .onErrorResume(error -> {
                     log.warn(
-                            "TTS failed: {}",
+                            "TTS speak() failed: {}",
                             error.getMessage());
                     return Mono.just(new byte[0]);
                 });
@@ -89,7 +109,8 @@ public class SystemTextToSpeechService
         return Mono.fromCallable(() -> {
                     if (IS_WINDOWS) {
                         return isCommandAvailable(
-                                "powershell", "-Command",
+                                "powershell",
+                                "-Command",
                                 "Write-Host ok");
                     } else if (IS_MAC) {
                         return isCommandAvailable(
@@ -119,7 +140,7 @@ public class SystemTextToSpeechService
         return "system-unknown";
     }
 
-    // ── Private Helpers ───────────────────────────
+    // ── Audio generation (speak() path) ──────────
 
     private byte[] generateAudio(String text)
             throws Exception {
@@ -130,16 +151,18 @@ public class SystemTextToSpeechService
 
         try {
             if (IS_WINDOWS) {
-                generateWindowsAudio(text, tempFile);
+                runProcess(new ProcessBuilder(
+                        "powershell", "-Command",
+                        buildWindowsCommand(
+                                sanitizeForShell(text),
+                                tempFile.getAbsolutePath()
+                                        .replace("\\", "\\\\"))));
+
             } else if (IS_MAC) {
                 generateMacAudio(text, tempFile);
+
             } else if (IS_LINUX) {
                 generateLinuxAudio(text, tempFile);
-            } else {
-                log.warn(
-                        "Unsupported OS for TTS: {}",
-                        OS);
-                return new byte[0];
             }
 
             if (tempFile.exists()
@@ -147,108 +170,147 @@ public class SystemTextToSpeechService
                 return Files.readAllBytes(
                         tempFile.toPath());
             }
-
             return new byte[0];
 
         } finally {
-            tempFile.delete();
+            // deleteOnExit handles cleanup at JVM exit
+            // explicit delete for immediate cleanup
+            if (tempFile.exists()) {
+                boolean deleted = tempFile.delete();
+                if (!deleted) {
+                    log.debug(
+                            "Temp TTS file will be "
+                                    + "deleted on JVM exit");
+                }
+            }
         }
     }
+
+    // ── Playback (speakAndPlay() path) ────────────
 
     private void playText(String text)
             throws Exception {
 
         String safe = sanitizeForShell(text);
-        Process process;
 
         if (IS_WINDOWS) {
-            process = new ProcessBuilder(
+            runProcess(new ProcessBuilder(
                     "powershell", "-Command",
-                    "Add-Type -AssemblyName "
-                            + "System.Speech; "
-                            + "$s = New-Object "
-                            + "System.Speech.Synthesis"
-                            + ".SpeechSynthesizer; "
-                            + "$s.Speak('"
-                            + safe + "')")
-                    .start();
+                    buildWindowsCommand(safe, null)));
 
         } else if (IS_MAC) {
-            process = new ProcessBuilder(
-                    "say", safe)
-                    .start();
+            // FIX: buildMacArgs() returns List<String>
+            // new ProcessBuilder(List) — then .start()
+            runProcess(new ProcessBuilder(
+                    buildMacArgs(safe, null)));
 
         } else if (IS_LINUX) {
-            if (isCommandAvailable(
-                    "espeak", "--version")) {
-                process = new ProcessBuilder(
-                        "espeak", safe)
-                        .start();
-            } else {
-                process = new ProcessBuilder(
-                        "festival", "--tts")
-                        .start();
-                // Write text to festival stdin
-                process.getOutputStream()
-                        .write(safe.getBytes());
-                process.getOutputStream().close();
-            }
+            playLinuxText(safe);
+
         } else {
             log.warn(
-                    "No TTS for OS: {}", OS);
-            return;
-        }
-
-        // FIX Issue 1: destroyForcibly on timeout
-        boolean finished = process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            log.warn("TTS playback process timed out");
+                    "No TTS available for OS: {}",
+                    OS);
         }
     }
 
+    // ── Windows ───────────────────────────────────
+
     /**
-     * FIX Issue 1: destroyForcibly on timeout.
-     * Previously: waitFor() return value ignored.
-     * Timed-out child processes leaked silently.
+     * Build Windows PowerShell TTS command string.
+     * Shared by both speak() and speakAndPlay() paths.
+     *
+     * @param safe       sanitized text
+     * @param outputPath null = play, non-null = save WAV
      */
-    private void generateWindowsAudio(
-            String text, File outputFile)
-            throws Exception {
+    private String buildWindowsCommand(
+            String safe, String outputPath) {
 
-        String safe = sanitizeForShell(text);
-        String path = outputFile
-                .getAbsolutePath()
-                .replace("\\", "\\\\");
-
-        Process process = new ProcessBuilder(
-                "powershell", "-Command",
-                "Add-Type -AssemblyName "
-                        + "System.Speech; "
+        StringBuilder cmd = new StringBuilder(
+                "Add-Type -AssemblyName System.Speech; "
                         + "$s = New-Object "
                         + "System.Speech.Synthesis"
-                        + ".SpeechSynthesizer; "
-                        + "$s.SetOutputToWaveFile('"
-                        + path + "'); "
-                        + "$s.Speak('"
-                        + safe + "'); "
-                        + "$s.SetOutputToDefaultAudioDevice()")
-                .start();
+                        + ".SpeechSynthesizer; ");
 
-        // FIX Issue 1: check return + destroyForcibly
-        if (!process.waitFor(
-                TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            process.destroyForcibly();
-            log.warn(
-                    "Windows TTS generation timed out");
+        if (!voiceName.isBlank()) {
+            cmd.append("$s.SelectVoice('")
+                    .append(voiceName)
+                    .append("'); ");
         }
+
+        if (voiceSpeed != 1.0) {
+            // PowerShell Rate: -10 (slow) to 10 (fast)
+            int rate = Math.clamp(
+                    (int) ((voiceSpeed - 1.0) * 5),
+                    -5, 5);
+            cmd.append("$s.Rate = ")
+                    .append(rate)
+                    .append("; ");
+        }
+
+        if (outputPath != null) {
+            cmd.append("$s.SetOutputToWaveFile('")
+                    .append(outputPath)
+                    .append("'); ");
+        }
+
+        cmd.append("$s.Speak('")
+                .append(safe)
+                .append("'); ");
+
+        if (outputPath != null) {
+            cmd.append(
+                    "$s.SetOutputToDefaultAudioDevice()");
+        }
+
+        return cmd.toString();
     }
 
+    // ── macOS ─────────────────────────────────────
+
     /**
-     * FIX Issue 1: destroyForcibly on timeout.
-     * Applied to both say and afconvert processes.
+     *  Returns List<String> not ProcessBuilder.
+     * Callers do: new ProcessBuilder(buildMacArgs(...))
+     * Fixes "Incompatible types" compile error.
+     *
+     * no longer hardcodes "Samantha".
+     * Empty voiceName = system default preserved.
+     * Speed applied in BOTH speak() + speakAndPlay().
+     *
+     * @param safe       sanitized text
+     * @param outputPath null = play, non-null = AIFF file
      */
+    private List<String> buildMacArgs(
+            String safe, String outputPath) {
+
+        List<String> args = new ArrayList<>();
+        args.add("say");
+
+        // Only add -v when explicitly configured
+        // Empty voiceName = system default voice
+        if (!voiceName.isBlank()) {
+            args.add("-v");
+            args.add(voiceName);
+        }
+
+        // Apply speed in both paths
+        if (voiceSpeed != 1.0) {
+            int wpm = (int) (MAC_DEFAULT_WPM
+                    * voiceSpeed);
+            args.add("-r");
+            args.add(String.valueOf(wpm));
+        }
+
+        if (outputPath != null) {
+            args.add("-o");
+            args.add(outputPath);
+        }
+
+        args.add(safe);
+
+        return args;
+    }
+
     private void generateMacAudio(
             String text, File outputFile)
             throws Exception {
@@ -258,113 +320,186 @@ public class SystemTextToSpeechService
         aiffFile.deleteOnExit();
 
         try {
+            // FIX: buildMacArgs() returns List<String>
+            // new ProcessBuilder(List) — correct type
             Process sayProcess =
                     new ProcessBuilder(
-                            "say",
-                            "-o",
-                            aiffFile.getAbsolutePath(),
-                            text)
+                            buildMacArgs(
+                                    text,
+                                    aiffFile.getAbsolutePath()))
                             .start();
 
-            // FIX Issue 1: destroyForcibly on timeout
             if (!sayProcess.waitFor(
                     TIMEOUT_SECONDS,
                     TimeUnit.SECONDS)) {
                 sayProcess.destroyForcibly();
-                log.warn(
-                        "macOS say process timed out");
+                log.warn("macOS say timed out");
                 return;
             }
 
-            if (aiffFile.exists()) {
-                Process convertProcess =
+            if (aiffFile.exists()
+                    && aiffFile.length() > 0) {
+
+                Process convert =
                         new ProcessBuilder(
                                 "afconvert",
                                 "-f", "WAVE",
                                 "-d", "LEI16",
-                                aiffFile
-                                        .getAbsolutePath(),
-                                outputFile
-                                        .getAbsolutePath())
+                                aiffFile.getAbsolutePath(),
+                                outputFile.getAbsolutePath())
                                 .start();
 
-                // FIX Issue 1: destroyForcibly
-                if (!convertProcess.waitFor(
+                if (!convert.waitFor(
                         TIMEOUT_SECONDS,
                         TimeUnit.SECONDS)) {
-                    convertProcess.destroyForcibly();
-                    log.warn(
-                            "afconvert timed out");
+                    convert.destroyForcibly();
+                    log.warn("afconvert timed out");
                 }
             }
 
         } finally {
-            aiffFile.delete();
+            if (aiffFile.exists()) {
+                boolean deleted = aiffFile.delete();
+                if (!deleted) {
+                    log.debug(
+                            "AIFF file will be "
+                                    + "deleted on JVM exit");
+                }
+            }
         }
     }
 
+    // ── Linux ─────────────────────────────────────
+
     /**
-     * FIX Issue 1: destroyForcibly on timeout.
-     * FIX Issue 2: Use text2wave for file output.
+     * buildLinuxArgs() extracted method.
+     * Removes duplication between generateLinuxAudio()
+     * and playLinuxText() (was 12 lines duplicated).
      *
-     * festival --tts = PLAYBACK only, not file output.
-     * text2wave -o <file> = correct WAV file writer.
-     * espeak -w <file> = direct WAV writer (preferred).
+     * speed applied in BOTH paths via -s flag.
+     *
+     * @param safe       sanitized text
+     * @param outputPath null = play, non-null = WAV file
      */
+    private List<String> buildEspeakArgs(
+            String safe, String outputPath) {
+
+        String voice = voiceName.isBlank()
+                ? "en" : voiceName;
+
+        List<String> args = new ArrayList<>();
+        args.add("espeak");
+        args.add("-v");
+        args.add(voice);
+
+        // Apply speed in both paths
+        if (voiceSpeed != 1.0) {
+            int wpm = (int) (LINUX_DEFAULT_WPM
+                    * voiceSpeed);
+            args.add("-s");
+            args.add(String.valueOf(wpm));
+        }
+
+        if (outputPath != null) {
+            args.add("-w");
+            args.add(outputPath);
+        }
+
+        args.add(safe);
+
+        return args;
+    }
+
     private void generateLinuxAudio(
             String text, File outputFile)
             throws Exception {
 
-        Process process;
+        String safe = sanitizeForShell(text);
 
         if (isCommandAvailable(
                 "espeak", "--version")) {
-            // espeak: writes WAV directly
-            process = new ProcessBuilder(
-                    "espeak",
-                    "-w",
-                    outputFile.getAbsolutePath(),
-                    text)
-                    .start();
+
+            runProcess(new ProcessBuilder(
+                    buildEspeakArgs(
+                            safe,
+                            outputFile.getAbsolutePath())));
 
         } else if (isCommandAvailable(
                 "text2wave", "--version")) {
-            // FIX Issue 2: text2wave for WAV output
-            // text2wave = festival's WAV file writer
-            // festival --tts = playback only (WRONG)
-            process = new ProcessBuilder(
+
+            runProcess(new ProcessBuilder(
                     "bash", "-c",
                     "echo '"
-                            + sanitizeForShell(text)
+                            + safe
                             + "' | text2wave -o "
                             + outputFile
-                            .getAbsolutePath())
-                    .start();
+                            .getAbsolutePath()));
 
         } else {
-            // Last resort: festival scheme approach
-            // Uses Festival's Scheme interface
-            // to save WAV programmatically
-            process = new ProcessBuilder(
+            // Festival Scheme: writes WAV directly
+            runProcess(new ProcessBuilder(
                     "bash", "-c",
                     "echo '(voice_kal_diphone) "
                             + "(utt.save.wave "
                             + "(SayText \""
-                            + sanitizeForShell(text)
+                            + safe
                             + "\") \""
-                            + outputFile
-                            .getAbsolutePath()
-                            + "\")' | festival")
-                    .start();
+                            + outputFile.getAbsolutePath()
+                            + "\")' | festival"));
         }
+    }
 
-        // FIX Issue 1: destroyForcibly on timeout
+    private void playLinuxText(String safe)
+            throws Exception {
+
+        if (isCommandAvailable(
+                "espeak", "--version")) {
+
+            // FIX: shared buildEspeakArgs()
+            // no outputPath = play mode
+            runProcess(new ProcessBuilder(
+                    buildEspeakArgs(safe, null)));
+
+        } else {
+            // FIX Issue 3: Festival reads from stdin
+            // ProcessBuilder("festival","--tts")
+            // then write text to stdin
+            Process festival =
+                    new ProcessBuilder(
+                            "festival", "--tts")
+                            .start();
+
+            try (OutputStream stdin =
+                         festival.getOutputStream()) {
+                stdin.write(safe.getBytes());
+                stdin.flush();
+            }
+
+            if (!festival.waitFor(
+                    TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS)) {
+                festival.destroyForcibly();
+                log.warn("Festival timed out");
+            }
+        }
+    }
+
+    // ── Utilities ─────────────────────────────────
+
+    /**
+     * Run a ProcessBuilder and wait for completion.
+     * Destroys process if timeout exceeded.
+     * Shared by all three OS paths.
+     */
+    private void runProcess(ProcessBuilder pb)
+            throws Exception {
+
+        Process process = pb.start();
+
         if (!process.waitFor(
-                TIMEOUT_SECONDS,
-                TimeUnit.SECONDS)) {
+                TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             process.destroyForcibly();
-            log.warn(
-                    "Linux TTS generation timed out");
+            log.warn("TTS process timed out");
         }
     }
 
@@ -382,7 +517,6 @@ public class SystemTextToSpeechService
 
     private String sanitizeForShell(String text) {
         if (text == null) return "";
-
         return text
                 .replace("'", " ")
                 .replace("`", " ")

@@ -8,7 +8,7 @@ GitHub: https://github.com/sujankim/jarvis-ai-platform
 
 ### Core Philosophy
 
-* Local AI first (Ollama) — cloud (Gemini) as fallback
+* Local AI first (Ollama) — cloud providers as optional fallback
 * Your data never leaves your machine
 * Privacy by architecture, not policy
 * Reactive-first architecture
@@ -25,8 +25,8 @@ GitHub: https://github.com/sujankim/jarvis-ai-platform
 | Phase 2 | ✅ Core Complete | Memory + pgvector |
 | Phase 3 | ✅ Core Complete | RAG Engine        |
 | Phase 4 | ✅ Core Complete | Tool Engine + MCP |
-| Phase 5 | 🔨 In Progress  | Voice Assistant   |
-| Phase 6 | 📋 Planned      | Agents            |
+| Phase 5 | ✅ Core Complete | Voice Assistant   |
+| Phase 6 | 🔨 Next         | Agents            |
 | Phase 7 | 📋 Planned      | Web UI            |
 
 ---
@@ -34,60 +34,80 @@ GitHub: https://github.com/sujankim/jarvis-ai-platform
 # AI Architecture Overview
 
 ```text
-User
- │
- ├── CLI
- └── REST API
-      │
-      ▼
-AiOrchestrator
-      │
-      ▼
-PromptAssembler
-      │
-      ├── Working Memory
-      ├── Long-Term Memory
-      ├── RAG Context
-      ├── Session History
-      │
-      ▼
-ProviderRouter
-      │
-      ├── OllamaProvider
-      └── GeminiProvider
-      │
-      ▼
-ToolRegistry
-      │
-      ├── DateTimeTool
-      ├── CalculatorTool
-      ├── WeatherTool
-      └── WebSearchTool
-      │
-      ▼
-PostgreSQL + pgvector + Redis
+                   User
+                     │
+         ┌───────────┴───────────┐
+         │                       │
+       CLI                    REST API
+         │                       │
+         └───────────┬───────────┘
+                     │
+                     ▼
+              AiOrchestrator
+                     │
+                     ▼
+             PromptAssembler
+                     │
+     ┌───────────────┼────────────────┐
+     │               │                │
+Working Memory   Long-Term Memory   RAG Context
+     │               │                │
+     └───────────────┼────────────────┘
+                     │
+              Session History
+                     │
+                     ▼
+              ProviderRouter
+         ┌───────────┴────────────┐
+         │                        │
+   OllamaProvider          GeminiProvider
+         │                        │
+         └───────────┬────────────┘
+                     │
+              ToolRegistry
+                     │
+    ┌────────────────┼────────────────┐
+    │                │                │
+DateTimeTool   CalculatorTool   WeatherTool
+                     │
+               WebSearchTool
+                     │
+                MCP Server
+                     │
+                     ▼
+      PostgreSQL + pgvector + Redis
+
+VoiceController
+        │
+        ▼
+VoiceConversationService
+        │
+        ├── WhisperTranscriptionService
+        ├── AiOrchestrator
+        └── SystemTextToSpeechService
 ```
 
 ---
 
 # Tech Stack
 
-| Layer            | Technology                |
-| ---------------- | ------------------------- |
-| Language         | Java 21                   |
-| Framework        | Spring Boot 4.0.6         |
-| AI               | Spring AI 2.0 (M8+)       |
-| Web              | Spring WebFlux (Reactive) |
-| DB Access        | R2DBC (Reactive)          |
-| Database         | PostgreSQL 16             |
-| Vector Database  | pgvector 0.7.4            |
-| Migrations       | Flyway (V1–V15+)           |
-| Mapping          | MapStruct 1.6             |
-| Security         | Spring Security 7 + JWT   |
-| Password Hashing | Argon2id (Bouncy Castle)  |
-| CLI              | Spring Shell 4.0 + JLine  |
-| Tools            | Spring AI @Tool + MCP     |
-| Cache            | Redis 7                   |
+| Layer            | Technology              |
+| ---------------- | ----------------------- |
+| Language         | Java 21                 |
+| Framework        | Spring Boot 4.0.6       |
+| AI               | Spring AI 2.0 (M8+)     |
+| Web              | Spring WebFlux          |
+| Database         | PostgreSQL 16           |
+| Vector Database  | pgvector 0.7.4          |
+| Data Access      | R2DBC                   |
+| Cache            | Redis 7                 |
+| Security         | Spring Security 7 + JWT |
+| Password Hashing | Argon2id                |
+| CLI              | Spring Shell 4          |
+| AI Tools         | Spring AI @Tool + MCP   |
+| Mapping          | MapStruct 1.6           |
+| API Docs         | SpringDoc OpenAPI       |
+| Migrations       | Flyway (V1–V15+)        |
 
 ---
 
@@ -97,24 +117,24 @@ PostgreSQL + pgvector + Redis
 ai.jarvis/
 │
 ├── ai/
-│   ├── orchestrator/      AiOrchestrator
-│   ├── provider/          Ollama/Gemini providers
-│   └── prompt/            PromptAssembler
+│   ├── orchestrator/
+│   ├── prompt/
+│   └── provider/
 │
 ├── chat/
-│   ├── session/           ChatSession
-│   └── message/           Message
+│   ├── session/
+│   └── message/
 │
-├── cli/                   Spring Shell commands
+├── cli/
 │
-├── memory/                Phase 2 Memory System
-│   └── session/           Redis cache
+├── memory/
+│   └── session/
 │
-├── rag/                   Phase 3 RAG Engine
-│   ├── extraction/        Text extractors
-│   └── processing/        Chunking + embeddings
+├── rag/
+│   ├── extraction/
+│   └── processing/
 │
-├── tools/                 Phase 4 Tool Engine
+├── tools/
 │   ├── builtin/
 │   │   ├── DateTimeTool
 │   │   ├── CalculatorTool
@@ -124,19 +144,21 @@ ai.jarvis/
 │   └── mcp/
 │       └── McpServerConfig
 │
-├── voice/                 Phase 5 (In Progress)
+├── voice/                 Phase 5
+│   ├── WhisperTranscriptionService
+│   ├── SystemTextToSpeechService
+│   ├── VoiceConversationService
+│   ├── VoiceController
+│   └── exception/
+│       └── VoiceException
 │
-├── agents/                Phase 6 (Planned)
+├── agents/                Phase 6
 │
-├── security/              JWT + Authentication
-│
-├── user/                  User Management
-│
-├── observability/         Metrics + Logging
-│
-├── common/                Shared Utilities
-│
-└── config/                Spring Configuration
+├── security/
+├── user/
+├── observability/
+├── common/
+└── config/
 ```
 
 ---
@@ -145,11 +167,9 @@ ai.jarvis/
 
 ## 1. AiProvider Interface Is Sacred
 
-Rules:
-
-* All AI providers implement `AiProvider`
-* All providers accept `ToolRegistry` injection
-* Provider selection handled by `ProviderRouter`
+* Every AI provider implements `AiProvider`
+* Provider selection is handled only by `ProviderRouter`
+* Providers receive `ToolRegistry`
 * Never call provider implementations directly
 
 ---
@@ -160,49 +180,42 @@ Rules:
 CLI → Controllers → Services → Providers → Database
 ```
 
-Never:
-
-* Skip layers
-* Reverse dependencies
-* Access repositories from controllers
-* Access providers from controllers
+Never bypass layers.
 
 ---
 
-## 3. AiOrchestrator Is The ONLY Coordinator
+## 3. AiOrchestrator Is the Only AI Coordinator
 
 Responsibilities:
 
 * Load session history
 * Load memory context
 * Load RAG context
-* Build prompt
+* Build prompts
 * Select provider
 * Execute tools
-* Save messages
+* Save conversation history
 
-Controllers and CLI must never orchestrate AI workflows.
+Controllers and CLI must never orchestrate AI workflows directly.
 
 ---
 
-## 4. PromptAssembler Assembly Order
-
-This order is mandatory:
+## 4. Prompt Assembly Order
 
 ```text
 1. System Prompt
 2. Working Memory
-3. Long-Term Memories
-4. RAG Document Context
+3. Long-Term Memory
+4. RAG Context
 5. Session History
 6. Current User Message
 ```
 
-Do not change without architectural discussion.
+Do not change this ordering without an architecture discussion.
 
 ---
 
-## 5. Tool Package Structure
+## 5. Tool Architecture
 
 ```text
 tools/
@@ -220,323 +233,31 @@ tools/
     └── McpServerConfig
 ```
 
----
-
-# Code Standards
-
-## Java
-
-Use records for DTOs.
-
-```java
-public record UserResponse(
-        UUID id,
-        String username
-) {}
-```
-
-Use builder APIs.
-
-```java
-OllamaOptions options =
-        OllamaOptions.builder()
-                .model("llama3.1:8b")
-                .temperature(0.7)
-                .build();
-```
-
-Never use deprecated setter APIs.
+All built-in tools belong under `tools/builtin`.
 
 ---
 
-## Spring Shell 4
-
-Preferred:
-
-```java
-@Component
-public class MyCommands {
-
-    @Command(
-        name = "my-command",
-        description = "Example command"
-    )
-    public String execute(
-            @Option(
-                longNames = "value")
-            String value) {
-
-        return value;
-    }
-}
-```
-
-Avoid:
-
-```java
-@ShellComponent
-@ShellMethod
-@ShellOption
-```
-
----
-
-# Tool Development Standards
-
-Adding a new tool:
-
-```java
-package ai.jarvis.tools.builtin;
-
-@Component
-public class MyTool implements JarvisTool {
-
-    @Tool(
-        description =
-                "What this tool does. "
-                        + "When AI should call it. "
-                        + "What it returns."
-    )
-    public String execute(
-            @ToolParam(
-                    description =
-                            "Expected parameter")
-            String input) {
-
-        try {
-            return "result";
-        } catch (Exception e) {
-            return "Error: " + e.getMessage();
-        }
-    }
-}
-```
-
----
-
-## Tool Rules
-
-### Required
-
-* Explain WHAT it does
-* Explain WHEN AI should call it
-* Explain expected parameters
-* Explain return value
-* Provide examples when useful
-
-### Forbidden
-
-* Throw exceptions
-* Return null
-* Perform destructive operations without validation
-* Use vague descriptions
-
----
-
-# Reactive Programming Rules
-
-Correct:
-
-```java
-public Mono<String> process() {
-
-    return Mono.zip(
-            loadHistory(sessionId),
-            loadMemory(userId, message),
-            loadRag(userId, message)
-    ).flatMap(tuple ->
-            handle(tuple));
-}
-```
-
-Incorrect:
-
-```java
-String result =
-        service.process().block();
-```
-
----
-
-## Reactive Guidelines
-
-Use:
-
-* `flatMap()` for async operations
-* `map()` for synchronous transforms
-* `switchIfEmpty()` for missing data
-* `onErrorResume()` for recovery
-
-Never:
-
-* `.block()` outside CLI
-* Mix blocking JDBC with R2DBC
-* Ignore reactive errors
-
----
-
-# Database Migrations
-
-| Version | Description                   |
-| ------- | ----------------------------- |
-| V1      | Create users                  |
-| V2      | Create AI providers           |
-| V3      | Create chat sessions          |
-| V4      | Create messages               |
-| V5      | Create system prompts         |
-| V6      | Create conversation summaries |
-| V7      | Create refresh tokens         |
-| V8      | Seed default data             |
-| V9      | Create memories               |
-| V10     | Enable pgvector               |
-| V11     | Add memory embeddings         |
-| V12     | Memory constraints            |
-| V13     | Create documents              |
-| V14     | Create document chunks        |
-| V15+    | Voice assistant tables        |
-
----
-
-# Security Rules
-
-Always:
-
-* Use Argon2id
-* Validate input with `@Valid`
-* Verify ownership before access
-* Sanitize user input
-
-Never:
-
-* Log passwords
-* Log password hashes
-* Log JWT tokens
-* Log refresh tokens
-* Log conversation content
-
-Required:
-
-```java
-.onErrorMap(
-        IllegalArgumentException.class,
-        ex -> new UnauthorizedException()
-)
-```
-
-for invalid UUID parsing.
-
----
-
-# Testing Rules
-
-Unit Test Example:
-
-```java
-@Test
-void shouldReturnUser() {
-
-    assertThat(result)
-            .isNotNull();
-}
-```
-
-Reactive Test Example:
-
-```java
-StepVerifier.create(flux)
-        .expectNextCount(1)
-        .verifyComplete();
-```
-
-Naming:
+## 6. Voice Architecture
 
 ```text
-*Test.java
-*IntegrationTest.java
+VoiceController
+        │
+        ▼
+VoiceConversationService
+        │
+        ├── WhisperTranscriptionService
+        ├── SystemTextToSpeechService
+        └── AiOrchestrator
 ```
 
----
+### Rules
 
-# Commit Message Convention
-
-Examples:
-
-```text
-feat: add weather tool
-
-fix: resolve streaming timeout
-
-docs: update architecture diagrams
-
-test: add PromptAssembler tests
-
-refactor: extract provider routing
-
-chore: upgrade Spring AI
-```
-
-Allowed Types:
-
-* feat
-* fix
-* docs
-* test
-* refactor
-* chore
-
----
-
-# Review Checklist
-
-## Reactive Correctness
-
-* [ ] No `.block()` outside cli/
-* [ ] `flatMap()` for async operations
-* [ ] `map()` for sync transformations
-* [ ] Proper error handling
-
-## Security
-
-* [ ] No sensitive logs
-* [ ] @Valid present
-* [ ] Ownership verification exists
-* [ ] UUID errors handled
-
-## Architecture
-
-* [ ] Layers respected
-* [ ] Tools implement JarvisTool
-* [ ] Built-in tools in tools/builtin
-* [ ] MCP code in tools/mcp
-* [ ] Providers receive ToolRegistry
-
-## Spring AI 2.0
-
-* [ ] Builder pattern used
-* [ ] MethodToolCallbackProvider.builder()
-* [ ] ChatClient.tools(toolRegistry.asArray())
-
-## Code Quality
-
-* [ ] Records used for DTOs
-* [ ] MapStruct used for mapping
-* [ ] Tests added
-* [ ] Conventional commits followed
-
----
-
-# What NOT To Change
-
-Do NOT:
-
-* Change AiProvider without discussion
-* Change PromptAssembler ordering
-* Bypass AiOrchestrator
-* Introduce microservices
-* Break local-first architecture
-* Add cloud services requiring user accounts
-* Move built-in tools outside tools/builtin
-* Move MCP code outside tools/mcp
+* `VoiceController` must **never** inject `WhisperTranscriptionService` directly.
+* `VoiceController` must **never** inject `SystemTextToSpeechService` directly.
+* `VoiceConversationService` coordinates the complete voice pipeline.
+* Voice features reuse the existing `AiOrchestrator`; do not create a separate AI workflow.
+* TTS playback must execute on a background `boundedElastic` scheduler.
+* SSE token streaming must remain independent from TTS playback.
 
 ---
 
@@ -549,8 +270,23 @@ Every contribution should reinforce:
 3. Reactive First
 4. Tool Driven
 5. Memory Aware
-6. Modular By Phase
-7. Developer Friendly
-8. Open Source First
+6. Voice Integrated
+7. Modular by Phase
+8. Developer Friendly
+9. Open Source First
 
-When in doubt, choose the solution that best aligns with these principles.
+---
+
+# What NOT To Change
+
+Do **not**:
+
+* Bypass `AiOrchestrator`
+* Change `PromptAssembler` ordering
+* Break dependency direction
+* Move built-in tools outside `tools/builtin`
+* Move MCP components outside `tools/mcp`
+* Inject providers directly into controllers
+* Inject Whisper or TTS directly into `VoiceController`
+* Introduce blocking calls into the reactive pipeline
+* Introduce cloud-only features that violate the local-first philosophy

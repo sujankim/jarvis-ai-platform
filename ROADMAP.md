@@ -127,27 +127,31 @@ and documentation written before any code.
 
 ---
 
-## 🎙️ Phase 5 — Voice Assistant 🔨 In Progress
+## 🎙️ Phase 5 — Voice Assistant ✅ Core Complete
 
-**Target:** `v0.5.0`
+**Released:** v0.5.0 core — June 2026
 
-### Core (Maintainer Builds)
-- Whisper via Ollama ← INCORRECT
-+ Whisper via Groq API (free, 6000/day) OR
-+ whisper.cpp local server
-+ Both use same OpenAI-compatible API format
-* 🔨 `WhisperTranscriptionService` abstracts both
-* 🔨 `TextToSpeechService` (local TTS)
-* 🔨 `VoiceConversationService` (full loop)
-* 🔨 `VoiceSession` entity + table (V15)
-* 📋 `AiOrchestrator` updated (voice mode)
-* 📋 `VoiceController` (core REST endpoints)
+### Core ✅ Complete
+* ✅ `WhisperTranscriptionService` (Groq API + local whisper.cpp)
+* ✅ `TextToSpeechService` (interface — Strategy Pattern)
+* ✅ `SystemTextToSpeechService` (Windows/macOS/Linux)
+* ✅ Voice selection (male/female per OS)
+* ✅ Speed control (0.5x – 2.0x)
+* ✅ `VoiceConversationService` (full voice loop)
+* ✅ Sentence-buffered TTS (natural speech rhythm)
+* ✅ Independent SSE token stream + background TTS
+* ✅ `VoiceController` (5 REST endpoints)
+* ✅ `VoiceChatEvent` record (SESSION/TOKEN/DONE)
+* ✅ VoiceException hierarchy
 
-### Contributor Tasks 📋
-* 📋 CLI voice commands (`voice`, `listen`, `speak`)
-* 📋 Voice REST API endpoints
-* 📋 Tests
-
+### Endpoints
+```text
+POST /api/v1/voice/transcribe  (audio → text)
+POST /api/v1/voice/speak       (text → play on server)
+POST /api/v1/voice/speak/bytes (text → wav bytes)
+POST /api/v1/voice/chat        (audio → SSE AI response)
+GET  /api/v1/voice/status      (availability check)
+```
 ---
 
 ## 🤖 Phase 6 — Agents 📋 Planned (`v0.6.0`)

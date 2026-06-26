@@ -14,7 +14,12 @@ class SystemTextToSpeechServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SystemTextToSpeechService();
+        // FIX: Constructor now requires 2 params
+        // since voice selection was added.
+        // voiceName="" = system default voice
+        // voiceSpeed=1.0 = normal speed
+        service = new SystemTextToSpeechService(
+                "", 1.0);
     }
 
     @Test
@@ -56,10 +61,11 @@ class SystemTextToSpeechServiceTest {
     @Test
     @DisplayName("isAvailable() returns boolean without error")
     void shouldReturnAvailabilityWithoutError() {
+        // FIX: boolean primitive is never null
+        // Just verify a value is emitted
         StepVerifier
                 .create(service.isAvailable())
-                .expectNextMatches(
-                        available -> available != null)
+                .expectNextCount(1)
                 .verifyComplete();
     }
 
@@ -95,11 +101,47 @@ class SystemTextToSpeechServiceTest {
     @Test
     @DisplayName("speak() never throws exception")
     void shouldNeverThrowException() {
-        // Even if TTS fails, returns empty bytes
-        // not an exception
         StepVerifier
                 .create(service.speak("test"))
                 .expectNextCount(1)
                 .verifyComplete();
+    }
+
+    // ── Voice selection tests ─────────────────────
+
+    @Test
+    @DisplayName("constructor accepts custom voice name")
+    void shouldAcceptCustomVoiceName() {
+        SystemTextToSpeechService customService =
+                new SystemTextToSpeechService(
+                        "Microsoft Zira Desktop",
+                        1.0);
+
+        assertThat(customService.getName())
+                .isNotBlank()
+                .startsWith("system-");
+    }
+
+    @Test
+    @DisplayName("constructor accepts custom speed")
+    void shouldAcceptCustomSpeed() {
+        SystemTextToSpeechService fastService =
+                new SystemTextToSpeechService(
+                        "", 1.5);
+
+        assertThat(fastService.getName())
+                .isNotBlank();
+    }
+
+    @Test
+    @DisplayName("constructor handles empty voice name")
+    void shouldHandleEmptyVoiceName() {
+        SystemTextToSpeechService defaultService =
+                new SystemTextToSpeechService(
+                        "", 1.0);
+
+        // Should use system default voice
+        assertThat(defaultService.getName())
+                .startsWith("system-");
     }
 }

@@ -68,7 +68,21 @@ class JwtServiceTest {
                 new JarvisProperties
                         .ObservabilityProperties(
                         true, true, true,
-                        Duration.ofMinutes(5))
+                        Duration.ofMinutes(5)),
+
+                // Added VoiceProperties (6th arg)
+                // JarvisProperties record now requires it
+                // Use defaults: empty voice name, speed 1.0
+                new JarvisProperties.VoiceProperties(
+                        new JarvisProperties.WhisperProperties(
+                                "https://api.groq.com/openai/v1",
+                                "",
+                                "whisper-large-v3-turbo"),
+                        new JarvisProperties.TtsProperties(
+                                true,
+                                "",
+                                1.0)
+                )
         );
 
         jwtService = new JwtService(props);
