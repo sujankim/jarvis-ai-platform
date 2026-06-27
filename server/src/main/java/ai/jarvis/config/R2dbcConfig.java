@@ -1,5 +1,8 @@
 package ai.jarvis.config;
 
+import ai.jarvis.agents.AgentStatus;
+import ai.jarvis.agents.AgentStepStatus;
+import ai.jarvis.agents.AgentStepType;
 import ai.jarvis.chat.message.MessageRole;
 import ai.jarvis.memory.MemoryType;
 import ai.jarvis.rag.DocumentFileType;
@@ -37,7 +40,13 @@ public class R2dbcConfig {
                         new DocumentStatusReadConverter(),
                         new DocumentStatusWriteConverter(),
                         new DocumentFileTypeReadConverter(),
-                        new DocumentFileTypeWriteConverter()
+                        new DocumentFileTypeWriteConverter(),
+                        new AgentStatusReadConverter(),
+                        new AgentStatusWriteConverter(),
+                        new AgentStepTypeReadConverter(),
+                        new AgentStepTypeWriteConverter(),
+                        new AgentStepStatusReadConverter(),
+                        new AgentStepStatusWriteConverter()
                 )
         );
     }
@@ -141,6 +150,63 @@ public class R2dbcConfig {
             implements Converter<DocumentFileType, String> {
         @Override
         public String convert(DocumentFileType source) {
+            return source.name();
+        }
+    }
+
+    // ── AgentStatus ───────────────────────────────
+    @ReadingConverter
+    public static class AgentStatusReadConverter
+            implements Converter<String, AgentStatus> {
+        @Override
+        public AgentStatus convert(String source) {
+            return AgentStatus.valueOf(source.toUpperCase());
+        }
+    }
+
+    @WritingConverter
+    public static class AgentStatusWriteConverter
+            implements Converter<AgentStatus, String> {
+        @Override
+        public String convert(AgentStatus source) {
+            return source.name();
+        }
+    }
+
+    // ── AgentStepType ─────────────────────────────
+    @ReadingConverter
+    public static class AgentStepTypeReadConverter
+            implements Converter<String, AgentStepType> {
+        @Override
+        public AgentStepType convert(String source) {
+            return AgentStepType.valueOf(source.toUpperCase());
+        }
+    }
+
+    @WritingConverter
+    public static class AgentStepTypeWriteConverter
+            implements Converter<AgentStepType, String> {
+        @Override
+        public String convert(AgentStepType source) {
+            return source.name();
+        }
+    }
+
+    // ── AgentStepStatus ───────────────────────────
+    @ReadingConverter
+    public static class AgentStepStatusReadConverter
+            implements Converter<String, AgentStepStatus> {
+        @Override
+        public AgentStepStatus convert(String source) {
+            return AgentStepStatus.valueOf(source.toUpperCase());
+        }
+    }
+
+    @WritingConverter
+    public static class AgentStepStatusWriteConverter
+            implements Converter<AgentStepStatus, String> {
+        @Override
+        public String convert(AgentStepStatus source) {
             return source.name();
         }
     }
