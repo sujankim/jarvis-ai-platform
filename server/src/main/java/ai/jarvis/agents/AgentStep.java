@@ -37,28 +37,21 @@ public record AgentStep(
         @Column("user_id")
         UUID userId,
 
-        // Position in execution order (0-based)
         @Column("step_index")
         int stepIndex,
 
-        // Which ReACT step type
         @Column("step_type")
         AgentStepType stepType,
 
-        // For ACT steps: which tool was called
         @Column("tool_name")
         String toolName,
 
-        // What was given to this step
         String input,
 
-        // What this step produced
         String output,
 
-        // Current execution status
         AgentStepStatus status,
 
-        // How long this step took
         @Column("duration_ms")
         Integer durationMs,
 
@@ -82,23 +75,16 @@ public record AgentStep(
      * @param input   the reasoning prompt
      */
     public static AgentStep createThink(
-            UUID agentId,
-            UUID userId,
-            int index,
-            String input) {
-
+            UUID agentId, UUID userId,
+            int index, String input) {
         return new AgentStep(
                 UUID.randomUUID(),
-                agentId, userId,
-                index,
+                agentId, userId, index,
                 AgentStepType.THINK,
-                null,           // no tool for THINK
-                input,
-                null,           // output filled later
+                null, input, null,
                 AgentStepStatus.PENDING,
                 null,
-                Instant.now(),
-                null);
+                Instant.now(), null);
     }
 
     /**
@@ -112,24 +98,17 @@ public record AgentStep(
      * @param input    tool input parameters
      */
     public static AgentStep createAct(
-            UUID agentId,
-            UUID userId,
-            int index,
-            String toolName,
+            UUID agentId, UUID userId,
+            int index, String toolName,
             String input) {
-
         return new AgentStep(
                 UUID.randomUUID(),
-                agentId, userId,
-                index,
+                agentId, userId, index,
                 AgentStepType.ACT,
-                toolName,
-                input,
-                null,           // output = tool result
+                toolName, input, null,
                 AgentStepStatus.PENDING,
                 null,
-                Instant.now(),
-                null);
+                Instant.now(), null);
     }
 
     /**
@@ -144,24 +123,18 @@ public record AgentStep(
      * @param output   the tool's result
      */
     public static AgentStep createObserve(
-            UUID agentId,
-            UUID userId,
-            int index,
-            String toolName,
+            UUID agentId, UUID userId,
+            int index, String toolName,
             String output) {
-
+        // OBSERVE is immediately DONE — no RUNNING phase
         return new AgentStep(
                 UUID.randomUUID(),
-                agentId, userId,
-                index,
+                agentId, userId, index,
                 AgentStepType.OBSERVE,
-                toolName,
-                null,           // no input for OBSERVE
-                output,
-                AgentStepStatus.DONE,   // immediately done
+                toolName, null, output,
+                AgentStepStatus.DONE,
                 null,
-                Instant.now(),
-                Instant.now());
+                Instant.now(), Instant.now());
     }
 
     /**
@@ -175,23 +148,28 @@ public record AgentStep(
      * @param answer  the final answer text
      */
     public static AgentStep createFinal(
-            UUID agentId,
-            UUID userId,
-            int index,
-            String answer) {
-
+            UUID agentId, UUID userId,
+            int index, String answer) {
+        // FINAL is immediately DONE — no RUNNING phase
         return new AgentStep(
                 UUID.randomUUID(),
-                agentId, userId,
-                index,
+                agentId, userId, index,
                 AgentStepType.FINAL,
-                null,           // no tool for FINAL
-                null,           // no input
-                answer,
-                AgentStepStatus.DONE,   // immediately done
+                null, null, answer,
+                AgentStepStatus.DONE,
                 null,
-                Instant.now(),
-                Instant.now());
+                Instant.now(), Instant.now());
+    }
+
+    // ── State Guards ──────────────────────────────
+
+    /**
+     * Check if step is in terminal state.
+     * Terminal steps cannot transition further.
+     */
+    private boolean isTerminal() {
+        return status == AgentStepStatus.DONE
+                || status == AgentStepStatus.FAILED;
     }
 
     // ── State Transition Methods ──────────────────
@@ -205,6 +183,12 @@ public record AgentStep(
      */
     public AgentStep withOutput(
             String result, int executionMs) {
+        if (status != AgentStepStatus.RUNNING) {
+            throw new IllegalStateException(
+                    "Only RUNNING steps can produce "
+                            + "output, current: "
+                            + status);
+        }
         return new AgentStep(
                 id, agentId, userId,
                 stepIndex, stepType,
@@ -212,8 +196,7 @@ public record AgentStep(
                 result,
                 AgentStepStatus.DONE,
                 executionMs,
-                createdAt,
-                Instant.now());
+                createdAt, Instant.now());
     }
 
     /**
@@ -221,14 +204,24 @@ public record AgentStep(
      * Used when step begins execution.
      */
     public AgentStep withRunning() {
+        if (isTerminal()
+                || stepType == AgentStepType.OBSERVE
+                || stepType == AgentStepType.FINAL
+                || status != AgentStepStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Invalid transition to RUNNING "
+                            + "for type="
+                            + stepType
+                            + " status="
+                            + status);
+        }
         return new AgentStep(
                 id, agentId, userId,
                 stepIndex, stepType,
                 toolName, input, output,
                 AgentStepStatus.RUNNING,
                 durationMs,
-                createdAt,
-                null);
+                createdAt, null);
     }
 
     /**
@@ -237,14 +230,19 @@ public record AgentStep(
      * @param error what went wrong
      */
     public AgentStep withFailed(String error) {
+        if (status != AgentStepStatus.RUNNING) {
+            throw new IllegalStateException(
+                    "Only RUNNING steps can fail, "
+                            + "current: "
+                            + status);
+        }
         return new AgentStep(
                 id, agentId, userId,
                 stepIndex, stepType,
                 toolName, input,
-                error,          // error in output field
+                error,
                 AgentStepStatus.FAILED,
                 durationMs,
-                createdAt,
-                Instant.now());
+                createdAt, Instant.now());
     }
 }

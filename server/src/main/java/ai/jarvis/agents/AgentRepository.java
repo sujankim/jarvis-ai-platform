@@ -62,6 +62,25 @@ public interface AgentRepository
      * Agent executor runs on separate thread.
      *
      * completed_at auto-set for terminal states.
+     *
+     *Compare-and-set status update.
+     *
+     * WHERE clause now includes:
+     * AND status = :expectedCurrentStatus
+     * If another concurrent transition already changed
+     * the status, this UPDATE matches 0 rows.
+     * Caller receives 0 and knows the transition failed.
+     *
+     * Prevents race condition where cancellation and
+     * completion both try to update simultaneously.
+     *
+     * @param agentId               agent to update
+     * @param expectedCurrentStatus required current status
+     * @param status                new status to set
+     * @param stepCount             updated step count
+     * @param finalAnswer           answer if COMPLETED
+     * @param errorMessage          error if FAILED
+     * @return 1 if updated, 0 if already changed
      */
     @Modifying
     @Query("""
@@ -79,9 +98,11 @@ public interface AgentRepository
                 END,
                 updated_at = NOW()
             WHERE id = :agentId
+              AND status = :expectedCurrentStatus
             """)
     Mono<Integer> updateStatus(
             UUID agentId,
+            String expectedCurrentStatus,
             String status,
             int stepCount,
             String finalAnswer,

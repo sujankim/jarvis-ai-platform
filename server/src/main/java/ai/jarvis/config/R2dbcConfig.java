@@ -40,7 +40,13 @@ public class R2dbcConfig {
                         new DocumentStatusReadConverter(),
                         new DocumentStatusWriteConverter(),
                         new DocumentFileTypeReadConverter(),
-                        new DocumentFileTypeWriteConverter()
+                        new DocumentFileTypeWriteConverter(),
+                        new AgentStatusReadConverter(),
+                        new AgentStatusWriteConverter(),
+                        new AgentStepTypeReadConverter(),
+                        new AgentStepTypeWriteConverter(),
+                        new AgentStepStatusReadConverter(),
+                        new AgentStepStatusWriteConverter()
                 )
         );
     }
@@ -148,14 +154,7 @@ public class R2dbcConfig {
         }
     }
 
-    // ── AgentStatus (Phase 6 NEW) ─────────────────
-
-    /**
-     * WHY needed:
-     * DB stores VARCHAR "PENDING", "RUNNING" etc.
-     * R2DBC cannot auto-convert to AgentStatus enum.
-     * This converter does it explicitly.
-     */
+    // ── AgentStatus ───────────────────────────────
     @ReadingConverter
     public static class AgentStatusReadConverter
             implements Converter<String, AgentStatus> {
@@ -174,8 +173,7 @@ public class R2dbcConfig {
         }
     }
 
-    // ── AgentStepType (Phase 6 NEW) ───────────────
-
+    // ── AgentStepType ─────────────────────────────
     @ReadingConverter
     public static class AgentStepTypeReadConverter
             implements Converter<String, AgentStepType> {
@@ -194,8 +192,7 @@ public class R2dbcConfig {
         }
     }
 
-    // ── AgentStepStatus (Phase 6 NEW) ────────────
-
+    // ── AgentStepStatus ───────────────────────────
     @ReadingConverter
     public static class AgentStepStatusReadConverter
             implements Converter<String, AgentStepStatus> {

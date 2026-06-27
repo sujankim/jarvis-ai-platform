@@ -34,25 +34,19 @@ public record Agent(
         @Column("session_id")
         UUID sessionId,
 
-        // The user's original task/goal
         String goal,
 
-        // Current execution status
         AgentStatus status,
 
-        // Populated when agent completes
         @Column("final_answer")
         String finalAnswer,
 
-        // Number of ReACT steps executed so far
         @Column("step_count")
         int stepCount,
 
-        // Populated if agent fails
         @Column("error_message")
         String errorMessage,
 
-        // Total execution time
         @Column("duration_ms")
         Integer durationMs,
 
@@ -62,52 +56,68 @@ public record Agent(
         @Column("updated_at")
         Instant updatedAt,
 
-        // Set when agent reaches terminal state
         @Column("completed_at")
         Instant completedAt
 
 ) {
 
-    // ── Factory Methods ───────────────────────────
+    // ── Factory Method ────────────────────────────
 
-    /**
-     * Create a new agent in PENDING status.
-     *
-     * Called when user submits a task.
-     * Agent has not started executing yet.
-     *
-     * @param userId    owner of this agent
-     * @param sessionId optional chat session link
-     * @param goal      the user's task description
-     */
     public static Agent create(
             UUID userId,
             UUID sessionId,
             String goal) {
-
         return new Agent(
                 UUID.randomUUID(),
                 userId,
                 sessionId,
                 goal,
                 AgentStatus.PENDING,
-                null,           // no answer yet
-                0,              // no steps yet
-                null,           // no error
-                null,           // no duration yet
+                null, 0, null, null,
                 Instant.now(),
                 Instant.now(),
-                null            // not completed
-        );
+                null);
+    }
+
+    // ── State Guards ──────────────────────────────
+
+    /**
+     * Check if the agent is in the terminal state.
+     * Terminal agents cannot transition to any other state.
+     */
+    private boolean isTerminal() {
+        return status == AgentStatus.COMPLETED
+                || status == AgentStatus.FAILED
+                || status == AgentStatus.CANCELLED;
+    }
+
+    /**
+     * Enforce expected current status.
+     * Prevents impossible transitions like
+     * PENDING → COMPLETED or RUNNING → RUNNING.
+     *
+     * @param expected required current status
+     * @throws IllegalStateException if current status wrong
+     */
+    private void requireStatus(AgentStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException(
+                    "Invalid transition from "
+                            + status
+                            + "; expected "
+                            + expected);
+        }
     }
 
     // ── State Transition Methods ──────────────────
 
     /**
-     * Transition from PENDING → RUNNING.
-     * Called when execution actually begins.
+     * PENDING → RUNNING.
+     * requireStatus(PENDING) prevents invalid
+     * transitions from non-PENDING states.
      */
     public Agent withRunning() {
+        requireStatus(AgentStatus.PENDING);
         return new Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.RUNNING,
@@ -118,74 +128,77 @@ public record Agent(
     }
 
     /**
-     * Transition from RUNNING → COMPLETED.
-     * Called when agent finishes successfully.
-     *
-     * @param answer        synthesized final answer
-     * @param totalSteps    how many steps were taken
-     * @param totalDurationMs total time in ms
+     * RUNNING → COMPLETED.
+     * requireStatus(RUNNING) prevents
+     * jumping to COMPLETED from PENDING.
      */
     public Agent withCompleted(
             String answer,
             int totalSteps,
             int totalDurationMs) {
-
+        requireStatus(AgentStatus.RUNNING);
         return new Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.COMPLETED,
-                answer,
-                totalSteps,
+                answer, totalSteps,
                 null,           // no error
                 totalDurationMs,
-                createdAt,
-                Instant.now(),
+                createdAt, Instant.now(),
                 Instant.now()); // completedAt = now
     }
 
     /**
-     * Transition from RUNNING → FAILED.
-     * Called when the agent encounters an unrecoverable error.
-     *
-     * @param error description of what went wrong
+     * RUNNING → FAILED.
+     * requireStatus(RUNNING) prevents
+     * failing a PENDING or already terminal agent.
      */
     public Agent withFailed(String error) {
+        requireStatus(AgentStatus.RUNNING);
         return new Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.FAILED,
                 finalAnswer, stepCount,
                 error, durationMs,
-                createdAt,
-                Instant.now(),
-                Instant.now()); // completedAt = now
+                createdAt, Instant.now(),
+                Instant.now());
     }
 
     /**
-     * Transition to CANCELLED.
-     * Called when user explicitly cancels.
+     * Any non-terminal → CANCELLED.
+     * isTerminal() check prevents
+     * cancelling an already completed agent.
      */
     public Agent withCancelled() {
+        if (isTerminal()) {
+            throw new IllegalStateException(
+                    "Agent is already terminal: "
+                            + status);
+        }
         return new Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.CANCELLED,
                 finalAnswer, stepCount,
                 null, durationMs,
-                createdAt,
-                Instant.now(),
+                createdAt, Instant.now(),
                 Instant.now());
     }
 
     /**
-     * Create copy with step count incremented by 1.
-     * Called after each ReACT step completes.
+     * Increment step count.
+     * isTerminal() prevents incrementing
+     * a completed/failed/cancelled agent.
      */
     public Agent withIncrementedStepCount() {
+        if (isTerminal()) {
+            throw new IllegalStateException(
+                    "Cannot increment a terminal agent");
+        }
         return new Agent(
                 id, userId, sessionId, goal,
                 status, finalAnswer,
-                stepCount + 1,  // ← increment
+                stepCount + 1,
                 errorMessage, durationMs,
-                createdAt,
-                Instant.now(),
+                createdAt, Instant.now(),
                 completedAt);
     }
 }

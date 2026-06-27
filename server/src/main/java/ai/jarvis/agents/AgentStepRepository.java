@@ -33,8 +33,12 @@ public interface AgentStepRepository
     /**
      * Steps of a specific type for an agent.
      * Example: get all ACT steps to see tool calls.
+     * OrderByStepIndexAsc.
+     * Same step type can appear multiple times
+     * (e.g. multiple ACT steps).
+     * Without ordering, trace is non-deterministic.
      */
-    Flux<AgentStep> findByAgentIdAndStepType(
+    Flux<AgentStep> findByAgentIdAndStepTypeOrderByStepIndexAsc(
             UUID agentId, AgentStepType stepType);
 
     /**

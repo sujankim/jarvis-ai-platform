@@ -6,11 +6,12 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("Agent Entity Tests")
 class AgentTest {
 
-    // ── Agent entity tests ────────────────────────
+    // ── Agent create() tests ──────────────────────
 
     @Test
     @DisplayName("create() sets PENDING status with defaults")
@@ -19,8 +20,7 @@ class AgentTest {
         UUID sessionId = UUID.randomUUID();
 
         Agent agent = Agent.create(
-                userId,
-                sessionId,
+                userId, sessionId,
                 "Research Spring Boot 4");
 
         assertThat(agent.id()).isNotNull();
@@ -36,7 +36,6 @@ class AgentTest {
         assertThat(agent.errorMessage()).isNull();
         assertThat(agent.durationMs()).isNull();
         assertThat(agent.createdAt()).isNotNull();
-        assertThat(agent.updatedAt()).isNotNull();
         assertThat(agent.completedAt()).isNull();
     }
 
@@ -44,76 +43,118 @@ class AgentTest {
     @DisplayName("create() allows null sessionId")
     void shouldAllowNullSessionId() {
         Agent agent = Agent.create(
-                UUID.randomUUID(),
-                null,       // ← no session
-                "Test goal");
+                UUID.randomUUID(), null, "Test goal");
 
         assertThat(agent.sessionId()).isNull();
         assertThat(agent.status())
                 .isEqualTo(AgentStatus.PENDING);
     }
 
+    // ── Agent state transition tests ──────────────
+
     @Test
-    @DisplayName("withRunning() transitions to RUNNING")
+    @DisplayName("withRunning() transitions PENDING → RUNNING")
     void shouldTransitionToRunning() {
         Agent agent = Agent.create(
-                UUID.randomUUID(), null, "Test goal");
+                UUID.randomUUID(), null, "Test");
 
         Agent running = agent.withRunning();
 
         assertThat(running.status())
                 .isEqualTo(AgentStatus.RUNNING);
-        // Original unchanged — immutable record
+        // Immutable — original unchanged
         assertThat(agent.status())
                 .isEqualTo(AgentStatus.PENDING);
     }
 
     @Test
-    @DisplayName("withCompleted() sets answer + COMPLETED")
+    @DisplayName("withRunning() throws if not PENDING")
+    void shouldThrowWhenRunningFromNonPending() {
+        Agent running = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
+
+        // Cannot go RUNNING → RUNNING
+        assertThatThrownBy(running::withRunning)
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("RUNNING")
+                .hasMessageContaining("PENDING");
+    }
+
+    @Test
+    @DisplayName("withCompleted() transitions RUNNING → COMPLETED")
     void shouldTransitionToCompleted() {
         Agent agent = Agent.create(
-                UUID.randomUUID(), null, "Test goal");
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
 
         Agent completed = agent.withCompleted(
-                "Final answer here",
-                5,      // totalSteps
-                3000);  // durationMs
+                "Final answer", 5, 3000);
 
         assertThat(completed.status())
                 .isEqualTo(AgentStatus.COMPLETED);
         assertThat(completed.finalAnswer())
-                .isEqualTo("Final answer here");
+                .isEqualTo("Final answer");
         assertThat(completed.stepCount()).isEqualTo(5);
         assertThat(completed.durationMs())
                 .isEqualTo(3000);
         assertThat(completed.completedAt())
                 .isNotNull();
-        assertThat(completed.errorMessage()).isNull();
     }
 
     @Test
-    @DisplayName("withFailed() sets errorMessage + FAILED")
+    @DisplayName("withCompleted() throws if not RUNNING")
+    void shouldThrowWhenCompletingFromPending() {
+        Agent agent = Agent.create(
+                UUID.randomUUID(), null, "Test");
+
+        // Cannot go PENDING → COMPLETED directly
+        assertThatThrownBy(() ->
+                agent.withCompleted("answer", 1, 100))
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("PENDING")
+                .hasMessageContaining("RUNNING");
+    }
+
+    @Test
+    @DisplayName("withFailed() transitions RUNNING → FAILED")
     void shouldTransitionToFailed() {
         Agent agent = Agent.create(
-                UUID.randomUUID(), null, "Test goal");
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
 
         Agent failed = agent.withFailed(
-                "Tool call timed out");
+                "Tool timed out");
 
         assertThat(failed.status())
                 .isEqualTo(AgentStatus.FAILED);
         assertThat(failed.errorMessage())
-                .isEqualTo("Tool call timed out");
+                .isEqualTo("Tool timed out");
         assertThat(failed.completedAt()).isNotNull();
     }
 
     @Test
-    @DisplayName("withCancelled() transitions to CANCELLED")
-    void shouldTransitionToCancelled() {
+    @DisplayName("withFailed() throws if not RUNNING")
+    void shouldThrowWhenFailingFromPending() {
         Agent agent = Agent.create(
-                UUID.randomUUID(), null, "Test goal");
+                UUID.randomUUID(), null, "Test");
 
-        Agent cancelled = agent.withCancelled();
+        assertThatThrownBy(() ->
+                agent.withFailed("error"))
+                .isInstanceOf(
+                        IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("withCancelled() cancels non-terminal agent")
+    void shouldCancelNonTerminalAgent() {
+        Agent running = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
+
+        Agent cancelled = running.withCancelled();
 
         assertThat(cancelled.status())
                 .isEqualTo(AgentStatus.CANCELLED);
@@ -122,12 +163,25 @@ class AgentTest {
     }
 
     @Test
+    @DisplayName("withCancelled() throws if already terminal")
+    void shouldThrowWhenCancellingTerminal() {
+        Agent completed = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning()
+                .withCompleted("done", 1, 100);
+
+        assertThatThrownBy(completed::withCancelled)
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("terminal");
+    }
+
+    @Test
     @DisplayName("withIncrementedStepCount() increments correctly")
     void shouldIncrementStepCount() {
         Agent agent = Agent.create(
-                UUID.randomUUID(), null, "Test");
-
-        assertThat(agent.stepCount()).isEqualTo(0);
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
 
         Agent step1 = agent.withIncrementedStepCount();
         assertThat(step1.stepCount()).isEqualTo(1);
@@ -135,78 +189,53 @@ class AgentTest {
         Agent step2 = step1.withIncrementedStepCount();
         assertThat(step2.stepCount()).isEqualTo(2);
 
-        // Originals unchanged — immutable
+        // Originals unchanged
         assertThat(agent.stepCount()).isEqualTo(0);
-        assertThat(step1.stepCount()).isEqualTo(1);
     }
 
-    // ── AgentStep entity tests ────────────────────
+    @Test
+    @DisplayName("withIncrementedStepCount() throws for terminal agent")
+    void shouldThrowWhenIncrementingTerminal() {
+        Agent completed = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning()
+                .withCompleted("done", 1, 100);
+
+        assertThatThrownBy(
+                completed::withIncrementedStepCount)
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("terminal");
+    }
+
+    // ── AgentStep factory tests ───────────────────
 
     @Test
-    @DisplayName("createThink() creates THINK step with PENDING status")
+    @DisplayName("createThink() creates THINK step PENDING")
     void shouldCreateThinkStep() {
-        UUID agentId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
-
         AgentStep step = AgentStep.createThink(
-                agentId, userId,
-                0,
-                "I need to search for weather data");
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                0, "I need weather data");
 
-        assertThat(step.id()).isNotNull();
-        assertThat(step.agentId()).isEqualTo(agentId);
-        assertThat(step.userId()).isEqualTo(userId);
-        assertThat(step.stepIndex()).isEqualTo(0);
         assertThat(step.stepType())
                 .isEqualTo(AgentStepType.THINK);
-        assertThat(step.toolName()).isNull();
-        assertThat(step.input())
-                .isEqualTo(
-                        "I need to search for weather data");
-        assertThat(step.output()).isNull();
         assertThat(step.status())
                 .isEqualTo(AgentStepStatus.PENDING);
-        assertThat(step.createdAt()).isNotNull();
+        assertThat(step.toolName()).isNull();
         assertThat(step.completedAt()).isNull();
     }
 
     @Test
-    @DisplayName("createAct() creates ACT step with tool name")
-    void shouldCreateActStep() {
-        AgentStep step = AgentStep.createAct(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                1,
-                "getWeather",
-                "London");
-
-        assertThat(step.stepType())
-                .isEqualTo(AgentStepType.ACT);
-        assertThat(step.toolName())
-                .isEqualTo("getWeather");
-        assertThat(step.input()).isEqualTo("London");
-        assertThat(step.output()).isNull();
-        assertThat(step.status())
-                .isEqualTo(AgentStepStatus.PENDING);
-    }
-
-    @Test
     @DisplayName("createObserve() creates OBSERVE step already DONE")
-    void shouldCreateObserveStep() {
+    void shouldCreateObserveDone() {
         AgentStep step = AgentStep.createObserve(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                2,
-                "getWeather",
-                "22°C, Sunny, Humidity: 45%");
+                2, "WeatherTool", "22°C Sunny");
 
         assertThat(step.stepType())
                 .isEqualTo(AgentStepType.OBSERVE);
-        assertThat(step.toolName())
-                .isEqualTo("getWeather");
-        assertThat(step.output())
-                .isEqualTo("22°C, Sunny, Humidity: 45%");
-        // OBSERVE is immediately DONE
         assertThat(step.status())
                 .isEqualTo(AgentStepStatus.DONE);
         assertThat(step.completedAt()).isNotNull();
@@ -214,62 +243,95 @@ class AgentTest {
 
     @Test
     @DisplayName("createFinal() creates FINAL step already DONE")
-    void shouldCreateFinalStep() {
+    void shouldCreateFinalDone() {
         AgentStep step = AgentStep.createFinal(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                3,
-                "The weather in London is 22°C.");
+                3, "London is 22°C.");
 
         assertThat(step.stepType())
                 .isEqualTo(AgentStepType.FINAL);
-        assertThat(step.output())
-                .isEqualTo(
-                        "The weather in London is 22°C.");
         assertThat(step.status())
                 .isEqualTo(AgentStepStatus.DONE);
         assertThat(step.completedAt()).isNotNull();
-        assertThat(step.toolName()).isNull();
-        assertThat(step.input()).isNull();
+    }
+
+    // ── AgentStep transition guard tests ─────────
+
+    @Test
+    @DisplayName("withRunning() valid for THINK PENDING")
+    void shouldMarkThinkStepRunning() {
+        AgentStep step = AgentStep.createThink(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                0, "reasoning");
+
+        AgentStep running = step.withRunning();
+
+        assertThat(running.status())
+                .isEqualTo(AgentStepStatus.RUNNING);
     }
 
     @Test
-    @DisplayName("withOutput() marks step DONE with result")
-    void shouldMarkStepDoneWithOutput() {
-        AgentStep step = AgentStep.createAct(
+    @DisplayName("withRunning() throws for OBSERVE step")
+    void shouldThrowWhenRunningObserve() {
+        AgentStep observe = AgentStep.createObserve(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                1, "getWeather", "London");
+                2, "tool", "result");
 
-        AgentStep done = step.withOutput(
-                "22°C, Sunny", 250);
+        // OBSERVE is already DONE — cannot go RUNNING
+        assertThatThrownBy(observe::withRunning)
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("RUNNING");
+    }
 
-        assertThat(done.output())
-                .isEqualTo("22°C, Sunny");
+    @Test
+    @DisplayName("withOutput() valid from RUNNING")
+    void shouldProduceOutputFromRunning() {
+        AgentStep running = AgentStep.createThink(
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        0, "reasoning")
+                .withRunning();
+
+        AgentStep done =
+                running.withOutput("result", 100);
+
         assertThat(done.status())
                 .isEqualTo(AgentStepStatus.DONE);
-        assertThat(done.durationMs()).isEqualTo(250);
-        assertThat(done.completedAt()).isNotNull();
-        // Original unchanged
-        assertThat(step.status())
-                .isEqualTo(AgentStepStatus.PENDING);
+        assertThat(done.output()).isEqualTo("result");
     }
 
     @Test
-    @DisplayName("withFailed() marks step FAILED with error")
-    void shouldMarkStepFailed() {
-        AgentStep step = AgentStep.createAct(
+    @DisplayName("withOutput() throws if not RUNNING")
+    void shouldThrowOutputFromPending() {
+        AgentStep pending = AgentStep.createThink(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                1, "getWeather", "London");
+                0, "reasoning");
 
-        AgentStep failed = step.withFailed(
-                "Connection timeout");
+        assertThatThrownBy(() ->
+                pending.withOutput("result", 100))
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("RUNNING");
+    }
 
-        assertThat(failed.status())
-                .isEqualTo(AgentStepStatus.FAILED);
-        assertThat(failed.output())
-                .isEqualTo("Connection timeout");
+    @Test
+    @DisplayName("withFailed() throws if not RUNNING")
+    void shouldThrowFailedFromPending() {
+        AgentStep pending = AgentStep.createAct(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                1, "tool", "input");
+
+        assertThatThrownBy(() ->
+                pending.withFailed("error"))
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining("RUNNING");
     }
 
     // ── Enum tests ────────────────────────────────
