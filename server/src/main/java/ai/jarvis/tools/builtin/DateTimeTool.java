@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.TextStyle;
 import java.util.Locale;
 import java.util.Set;
+import java.util.TimeZone;
 
 /**
  * Tool for date and time queries.
@@ -102,9 +102,8 @@ public class DateTimeTool implements JarvisTool {
             ZonedDateTime now =
                     ZonedDateTime.now(zoneId);
 
-            String zoneName = zoneId.getDisplayName(
-                    TextStyle.FULL, Locale.ENGLISH);
-
+            boolean isDst = TimeZone.getTimeZone(zoneId).inDaylightTime(java.util.Date.from(now.toInstant()));
+            String zoneName = TimeZone.getTimeZone(zoneId).getDisplayName(isDst,TimeZone.LONG, Locale.ENGLISH);
             String result = now.format(FULL_FORMATTER)
                     + " (" + zoneName + ")";
 

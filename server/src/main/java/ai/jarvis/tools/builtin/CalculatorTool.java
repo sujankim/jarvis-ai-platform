@@ -11,6 +11,7 @@ import javax.script.ScriptEngineManager;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import net.objecthunter.exp4j.ExpressionBuilder;
 
 /**
  * Tool for mathematical calculations.
@@ -110,7 +111,7 @@ public class CalculatorTool implements JarvisTool {
         } catch (ArithmeticException e) {
             if (e.getMessage() != null
                     && e.getMessage().contains(
-                    "divide by zero")) {
+                    "zero")) {
                 return "Error: Division by zero "
                         + "is undefined.";
             }
@@ -210,24 +211,26 @@ public class CalculatorTool implements JarvisTool {
      * @return sanitized expression or null if invalid
      */
     private String sanitize(String expression) {
-        // Replace ^ with ** for evaluation
-        String cleaned = expression
-                .trim()
-                .replace("^", "**")
-                .replace("sqrt(", "Math.sqrt(")
-                .replace("√", "Math.sqrt");
+    if (expression == null) {
+        return null;
+    }
+        String cleaned = expression.trim()
+        // Normalize Unicode and Python-style exponent only
+        .replace("√", "sqrt(")
+        .replace("**", "^");
 
-        // Check for invalid characters
-        // Allow: digits, operators, parens, dots,
-        //        spaces, and known function names
+        // Do NOT convert:
+        // ^      -&gt; **
+        // sqrt() -&gt; Math.sqrt()
+
         if (!cleaned.matches(
-                "[0-9+\\-*/()., " +
-                        "Math.sqrte%!\n\t]*")) {
-            return null;
+                "[0-9+\\-*/().^, sqrt\\n\\t]*")) {
+                return null;
         }
 
         return cleaned;
-    }
+
+        }
 
     /**
      * Evaluate mathematical expression safely.
@@ -238,87 +241,13 @@ public class CalculatorTool implements JarvisTool {
      * @return numerical result
      * @throws Exception if evaluation fails
      */
-    private double evaluate(
-            String sanitizedExpression)
-            throws Exception {
-
-        ScriptEngineManager manager =
-                new ScriptEngineManager();
-        ScriptEngine engine =
-                manager.getEngineByName("JavaScript");
-
-        if (engine == null) {
-            // Fallback: basic arithmetic only
-            return evaluateBasic(sanitizedExpression);
+    
+        private double evaluate(String expression) {
+                return new ExpressionBuilder(expression)
+                .build()
+                .evaluate();
         }
-
-        Object result = engine.eval(
-                sanitizedExpression);
-
-        if (result instanceof Number n) {
-            return n.doubleValue();
-        }
-
-        throw new RuntimeException(
-                "Expression did not return a number");
-    }
-
-    /**
-     * Fallback evaluator for basic arithmetic.
-     * Used when JavaScript engine unavailable.
-     * Handles: simple a op b expressions only.
-     */
-    private double evaluateBasic(
-            String expression) {
-
-        // Try to parse as simple number first
-        try {
-            return Double.parseDouble(
-                    expression.trim());
-        } catch (NumberFormatException ignored) {}
-
-        // Simple binary operations
-        String[] addParts = expression.split("\\+");
-        if (addParts.length == 2) {
-            return Double.parseDouble(
-                    addParts[0].trim())
-                    + Double.parseDouble(
-                    addParts[1].trim());
-        }
-
-        // Handle subtraction (avoid negative numbers)
-        int minusIdx = expression.lastIndexOf('-');
-        if (minusIdx > 0) {
-            return Double.parseDouble(
-                    expression.substring(0, minusIdx).trim())
-                    - Double.parseDouble(
-                    expression.substring(minusIdx + 1).trim());
-        }
-
-        String[] mulParts = expression.split("\\*");
-        if (mulParts.length == 2) {
-            return Double.parseDouble(
-                    mulParts[0].trim())
-                    * Double.parseDouble(
-                    mulParts[1].trim());
-        }
-
-        String[] divParts = expression.split("/");
-        if (divParts.length == 2) {
-            double divisor = Double.parseDouble(
-                    divParts[1].trim());
-            if (divisor == 0) {
-                throw new ArithmeticException(
-                        "divide by zero");
-            }
-            return Double.parseDouble(
-                    divParts[0].trim()) / divisor;
-        }
-
-        throw new RuntimeException(
-                "Could not evaluate: " + expression);
-    }
-
+    
     /**
      * Format result nicely for display.
      * Removes trailing zeros for whole numbers.
