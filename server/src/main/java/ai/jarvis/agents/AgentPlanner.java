@@ -12,29 +12,41 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Plans agent execution by asking the AI model
- * what the next step should be.
+ * what the next ReACT step should be.
  *
  * DOES NOT execute tools — only produces the
- * AI's reasoning about what to do next.
+ * AI's structured reasoning about what to do.
  * AgentExecutor handles actual tool execution.
  *
  * STRUCTURED OUTPUT FORMAT:
- * The system prompt instructs the AI to respond
- * in a specific format that parseResponse() can
- * reliably parse. This avoids JSON parsing issues
- * and works well with all Ollama models.
+ * The system prompt instructs AI to respond in
+ * a specific format that parseResponse() extracts.
+ * This avoids JSON parsing issues and works well
+ * with all Ollama models.
  *
- * THOUGHT/ACTION/INPUT format:
- * THOUGHT: reasoning here
- * ACTION: toolName
- * INPUT: tool input
+ * THOUGHT/ACTION/INPUT format (tool call):
+ *   THOUGHT: reasoning here
+ *   ACTION: toolMethodName
+ *   INPUT: tool input text
  *
- * OR when task complete:
- * THOUGHT: reasoning here
- * FINAL_ANSWER: complete answer here
+ * THOUGHT/FINAL_ANSWER format (task complete):
+ *   THOUGHT: reasoning here
+ *   FINAL_ANSWER: complete answer here
+ *
+ *
+ * extractAfter() now uses regex anchored to line starts.
+ * Previous indexOf() approach broke when tool inputs
+ * contained label-like text:
+ * - "Use the literal string ACTION: to do X"
+ *   would be truncated at "ACTION:"
+ * - "THOUGHT: I need to search" in a FINAL_ANSWER
+ *   would be truncated at the embedded "THOUGHT:"
+ * Regex with (?m)^LABEL anchors to line beginnings only.
  */
 @Slf4j
 @Service
@@ -44,11 +56,49 @@ public class AgentPlanner {
     private final ChatClient.Builder chatClientBuilder;
 
     /**
-     * System prompt that instructs the AI to act
-     * as a ReACT agent. Injected before every call.
+     * Pre-compiled patterns for each label.
+     * Anchored to line starts with (?m) multiline flag.
+     * (?ms) = multiline + dotall for multi-line content.
      *
-     * {tools} placeholder replaced with actual
-     * available tools before each request.
+     * WHY pre-compiled:
+     * parseResponse() is called for every AI step.
+     * Compiling patterns on every call is wasteful.
+     * Static pre-compilation runs once at class load.
+     *
+     * Pattern: ^LABEL\s*(.*?)(?=^NEXT_LABEL|\z)
+     * Captures everything after LABEL until next label
+     * at a line start or end of string.
+     */
+    private static final Pattern THOUGHT_PATTERN =
+            Pattern.compile(
+                    "(?ms)^THOUGHT:\\s*(.*?)"
+                            + "(?=^(?:ACTION:|INPUT:"
+                            + "|FINAL_ANSWER:)|\\z)");
+
+    private static final Pattern ACTION_PATTERN =
+            Pattern.compile(
+                    "(?ms)^ACTION:\\s*(.*?)"
+                            + "(?=^(?:THOUGHT:|INPUT:"
+                            + "|FINAL_ANSWER:)|\\z)");
+
+    private static final Pattern INPUT_PATTERN =
+            Pattern.compile(
+                    "(?ms)^INPUT:\\s*(.*?)"
+                            + "(?=^(?:THOUGHT:|ACTION:"
+                            + "|FINAL_ANSWER:)|\\z)");
+
+    private static final Pattern FINAL_PATTERN =
+            Pattern.compile(
+                    "(?ms)^FINAL_ANSWER:\\s*(.*?)"
+                            + "(?=^(?:THOUGHT:|ACTION:"
+                            + "|INPUT:)|\\z)");
+
+    /**
+     * System prompt instructing AI to act as ReACT agent.
+     * {tools} placeholder replaced before each request.
+     *
+     * The structured format is important — parseResponse()
+     * depends on exact label positions at line starts.
      */
     private static final String AGENT_SYSTEM_PROMPT =
             """
@@ -60,7 +110,7 @@ public class AgentPlanner {
             For each step, respond in EXACTLY this format:
             
             THOUGHT: [your reasoning about what to do next]
-            ACTION: [tool_name]
+            ACTION: [tool_method_name]
             INPUT: [input to the tool]
             
             When you have enough information to answer:
@@ -70,18 +120,17 @@ public class AgentPlanner {
             
             Rules:
             - Always start with THOUGHT
-            - Use tools when you need real-time data
+            - ACTION must be the exact method name shown above
+            - Use tools only when you need real-time data
             - Never make up information you don't have
-            - Keep tool inputs concise and specific
             - Maximum 10 tool calls per task
             """;
 
     /**
-     * Ask the AI what the next step should be.
+     * Ask the AI what the next ReACT step should be.
      *
-     * Sends the full execution history so the AI
-     * understands what has already been done and
-     * can decide what comes next.
+     * Sends the full execution history so the AI knows
+     * what has already been done and what comes next.
      *
      * Runs on boundedElastic because ChatClient.call()
      * is a blocking HTTP call to Ollama.
@@ -89,7 +138,7 @@ public class AgentPlanner {
      * @param goal             user's original task
      * @param toolList         formatted available tools
      * @param executionHistory previous steps as text
-     * @return Mono<String> raw AI response
+     * @return Mono<String> raw AI response text
      */
     public Mono<String> planNextStep(
             String goal,
@@ -114,8 +163,7 @@ public class AgentPlanner {
                             .append("\n\n");
 
                     if (executionHistory != null
-                            && !executionHistory
-                            .isBlank()) {
+                            && !executionHistory.isBlank()) {
                         userMsg.append(
                                         "PREVIOUS STEPS:\n")
                                 .append(executionHistory)
@@ -161,10 +209,14 @@ public class AgentPlanner {
 
     /**
      * Format available tools for the system prompt.
-     * Each tool shown as: - toolName: description
+     * Each tool shown as: "- methodName: description"
      *
-     * @param toolDescriptions map of name → description
-     * @return formatted multi-line string
+     * The method name is shown because AI must return
+     * the exact method name in ACTION: field.
+     * extractAfter() with exact tool dispatch requires this.
+     *
+     * @param toolDescriptions map of methodName → description
+     * @return formatted multi-line string or "No tools available."
      */
     public String formatToolList(
             Map<String, String> toolDescriptions) {
@@ -188,11 +240,15 @@ public class AgentPlanner {
     /**
      * Parse the AI's raw response into a structured result.
      *
-     * Handles four cases:
+     * Four cases handled:
      * 1. THOUGHT + ACTION + INPUT → tool call needed
      * 2. THOUGHT + FINAL_ANSWER   → task complete
-     * 3. THOUGHT only             → thinking step
+     * 3. THOUGHT only             → still reasoning
      * 4. Unstructured text        → treat as final answer
+     *
+     * Uses pre-compiled regex patterns anchored to line
+     * starts to avoid truncating content that contains
+     * label-like text (e.g. tool input saying "use ACTION:").
      *
      * @param response raw AI response text
      * @return PlanResult with type and extracted fields
@@ -205,96 +261,81 @@ public class AgentPlanner {
 
         String trimmed = response.trim();
 
-        // Check for FINAL_ANSWER first
-        if (trimmed.contains("FINAL_ANSWER:")) {
-            String answer = extractAfter(
-                    trimmed, "FINAL_ANSWER:");
-            String thought = extractAfter(
-                    trimmed, "THOUGHT:");
+        // Check FINAL_ANSWER first
+        // (AI may include THOUGHT before it)
+        String finalAnswer =
+                extractWithPattern(trimmed, FINAL_PATTERN);
+        if (!finalAnswer.isEmpty()) {
+            String thought =
+                    extractWithPattern(trimmed, THOUGHT_PATTERN);
             return PlanResult.finalAnswer(
-                    thought, answer);
+                    thought.isEmpty() ? null : thought,
+                    finalAnswer);
         }
 
         // Check for ACTION (tool call)
-        if (trimmed.contains("ACTION:")) {
-            String thought = extractAfter(
-                    trimmed, "THOUGHT:");
-            String action = extractAfter(
-                    trimmed, "ACTION:");
-            String input = extractAfter(
-                    trimmed, "INPUT:");
-
-            if (action.isBlank()) {
-                return PlanResult.error(
-                        "AI did not specify a tool");
-            }
-
+        String action =
+                extractWithPattern(trimmed, ACTION_PATTERN);
+        if (!action.isEmpty()) {
+            String thought =
+                    extractWithPattern(trimmed, THOUGHT_PATTERN);
+            String input =
+                    extractWithPattern(trimmed, INPUT_PATTERN);
             return PlanResult.action(
-                    thought,
+                    thought.isEmpty() ? null : thought,
                     action.trim(),
                     input.trim());
         }
 
-        // THOUGHT only — reasoning step
-        if (trimmed.contains("THOUGHT:")) {
-            String thought = extractAfter(
-                    trimmed, "THOUGHT:");
+        // THOUGHT only — AI still reasoning
+        String thought =
+                extractWithPattern(trimmed, THOUGHT_PATTERN);
+        if (!thought.isEmpty()) {
             return PlanResult.thought(thought);
         }
 
-        // Unstructured — treat as final answer
+        // Unstructured response — treat as final answer
+        // Handles models that don't follow the format exactly
         return PlanResult.finalAnswer(
                 "Direct response", trimmed);
     }
 
     /**
-     * Extract text after a label, stopping at
-     * the next label in the response.
+     * Extract text matching a pre-compiled pattern.
      *
-     * Example:
-     * "THOUGHT: foo\nACTION: bar"
-     * extractAfter("THOUGHT:") → "foo"
+     * Replaces the old indexOf() approach.
      *
-     * @param text  full response text
-     * @param label label to extract after
-     * @return text content after the label
+     * OLD extractAfter() problem:
+     * text.indexOf("ACTION:") found ANY "ACTION:" in the string.
+     * If tool input was "Use the string ACTION: as prefix",
+     * the THOUGHT content would be truncated there.
+     *
+     * NEW extractWithPattern() solution:
+     * Pattern uses (?ms)^LABEL — anchored to LINE STARTS.
+     * "ACTION:" inside a line (not at start) is ignored.
+     * Only label occurrences at column 0 trigger section breaks.
+     *
+     * @param text    full response text
+     * @param pattern pre-compiled label pattern
+     * @return extracted section text or empty string
      */
-    private String extractAfter(
-            String text, String label) {
-
-        int idx = text.indexOf(label);
-        if (idx == -1) return "";
-
-        String after = text.substring(
-                idx + label.length()).trim();
-
-        // Stop at next label
-        String[] labels = {
-                "THOUGHT:", "ACTION:",
-                "INPUT:", "FINAL_ANSWER:"
-        };
-
-        int endIdx = after.length();
-        for (String next : labels) {
-            if (next.equals(label)) continue;
-            int nextIdx = after.indexOf(next);
-            if (nextIdx > 0 && nextIdx < endIdx) {
-                endIdx = nextIdx;
-            }
-        }
-
-        return after.substring(0, endIdx).trim();
+    private String extractWithPattern(
+            String text, Pattern pattern) {
+        Matcher matcher = pattern.matcher(text);
+        return matcher.find()
+                ? matcher.group(1).trim()
+                : "";
     }
 
-    // ── Plan Result ───────────────────────────────
+    // ── Plan Result Record ────────────────────────
 
     /**
-     * Parsed result from an AI planning response.
+     * Parsed result from one AI planning response.
      *
-     * ACTION: AI wants to call a tool
-     * FINAL:  AI has the complete answer
-     * THOUGHT: AI is still reasoning
-     * ERROR:  Something went wrong
+     * ACTION: AI wants to call a tool with given input
+     * FINAL:  AI has synthesized the complete answer
+     * THOUGHT: AI reasoning step (no action yet)
+     * ERROR:  Parsing or planning failed
      */
     public record PlanResult(
             PlanType type,
@@ -309,6 +350,13 @@ public class AgentPlanner {
             ACTION, FINAL, THOUGHT, ERROR
         }
 
+        /**
+         * AI wants to call a tool.
+         *
+         * @param thought  AI reasoning (may be null)
+         * @param toolName exact method name to call
+         * @param toolInput input for the tool
+         */
         public static PlanResult action(
                 String thought,
                 String toolName,
@@ -320,6 +368,12 @@ public class AgentPlanner {
                     null, null);
         }
 
+        /**
+         * AI has the complete answer.
+         *
+         * @param thought     final reasoning (may be null)
+         * @param finalAnswer the answer for the user
+         */
         public static PlanResult finalAnswer(
                 String thought, String answer) {
             return new PlanResult(
@@ -329,6 +383,11 @@ public class AgentPlanner {
                     answer, null);
         }
 
+        /**
+         * AI reasoning step — no tool call or final answer yet.
+         *
+         * @param thought AI reasoning text
+         */
         public static PlanResult thought(
                 String thought) {
             return new PlanResult(
@@ -338,6 +397,11 @@ public class AgentPlanner {
                     null, null);
         }
 
+        /**
+         * Planning or parsing failed.
+         *
+         * @param message description of what went wrong
+         */
         public static PlanResult error(
                 String message) {
             return new PlanResult(
@@ -347,14 +411,17 @@ public class AgentPlanner {
                     null, message);
         }
 
-        public boolean isFinal() {
-            return type == PlanType.FINAL;
-        }
-
+        /** True if AI wants to call a tool. */
         public boolean isAction() {
             return type == PlanType.ACTION;
         }
 
+        /** True if AI has the complete answer. */
+        public boolean isFinal() {
+            return type == PlanType.FINAL;
+        }
+
+        /** True if planning/parsing failed. */
         public boolean isError() {
             return type == PlanType.ERROR;
         }

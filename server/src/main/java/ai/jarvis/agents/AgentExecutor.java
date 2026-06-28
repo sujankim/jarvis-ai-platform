@@ -29,19 +29,26 @@ import java.util.UUID;
  * 6. Enforce MAX_STEPS + TIMEOUT safety limits
  *
  * WHY Flux.create() NOT Flux.generate():
- * Flux.generate() allows only ONE sink.next() per generator call.
- * When AI returns THOUGHT + FINAL_ANSWER in one response, we need
- * to emit two events (THINK + FINAL) from the same iteration.
- * Flux.generate() throws "More than one call to onNext" in this case.
+ * Flux.generate() allows only ONE sink.next() per invocation.
+ * When AI returns THOUGHT + FINAL in one response, two events
+ * are needed → generate() crashes with "More than one call to onNext".
+ * Flux.create() allows unlimited sink.next() calls per iteration.
  *
- * Flux.create() allows unlimited sink.next() calls, so a single
- * AI response can produce THINK + FINAL or THINK + ACT + OBSERVE
- * all in one loop iteration without errors.
  *
- * The entire loop runs on boundedElastic because:
- * - planNextStep() calls Ollama (blocking HTTP)
- * - executeTool() calls @Tool methods (may be blocking)
- * - saveStep() calls .block() on R2DBC (blocking)
+ * 1. sink.isCancelled() check: honors SSE disconnect.
+ *    Without this, abandoned clients still consume boundedElastic
+ *    threads for the full 120s timeout.
+ *
+ * 2. stepIndex: captured once per loop iteration (currentStep).
+ *    Previously stepIndex was incremented after THINK, ACT, OBSERVE
+ *    making it an event counter not a step counter.
+ *    THINK(0)/ACT(1)/OBSERVE(2) for one iteration was wrong —
+ *    they all belong to the same logical step.
+ *
+ * 3. Tool matching: exact case-insensitive only (not substring).
+ *    "webSearch".contains("search") matched wrong tools.
+ *    "please calculate this".contains("calculate") caused false match.
+ *    Now: methodName.equalsIgnoreCase(toolName.trim()) only.
  */
 @Slf4j
 @Service
@@ -52,7 +59,7 @@ public class AgentExecutor {
     private final ToolRegistry toolRegistry;
     private final R2dbcEntityTemplate r2dbcEntityTemplate;
 
-    // Safety limits
+    // Safety limits to prevent runaway agents
     private static final int MAX_STEPS = 10;
     private static final Duration TOTAL_TIMEOUT =
             Duration.ofSeconds(120);
@@ -67,7 +74,7 @@ public class AgentExecutor {
      *
      * The loop runs entirely on boundedElastic because every
      * operation inside is blocking (Ollama calls, DB saves).
-     * This keeps the WebFlux event loop free.
+     * This keeps the WebFlux event loop thread free.
      *
      * @param agent  the Agent entity (already RUNNING status)
      * @param userId owner for DB operations
@@ -83,21 +90,18 @@ public class AgentExecutor {
                 agent.id(),
                 toolRegistry.count());
 
-        // Flux.create() replaces Flux.generate()
-        // create() allows multiple sink.next() per iteration
-        // generate() only allows ONE per iteration → crashes
-        // when THINK + FINAL are emitted in same AI response
         return Flux.<AgentEvent>create(sink ->
-                        runLoop(sink, agent, userId, toolList))
+                        runLoop(sink, agent,
+                                userId, toolList))
                 .subscribeOn(
-                        // Run blocking loop on separate thread
-                        // never block WebFlux event loop
+                        // Run blocking operations on separate thread
+                        // Never block the WebFlux event loop
                         Schedulers.boundedElastic())
                 .timeout(TOTAL_TIMEOUT)
                 .onErrorResume(error -> {
                     log.error(
-                            "Agent execution error: id={} "
-                                    + "error={}",
+                            "Agent execution error: "
+                                    + "id={} error={}",
                             agent.id(),
                             error.getMessage());
                     return Flux.just(
@@ -112,15 +116,19 @@ public class AgentExecutor {
     /**
      * The full ReACT execution loop.
      *
-     * Runs synchronously inside Flux.create() on
-     * a boundedElastic thread. This is correct because:
-     * - Each step depends on the previous result
-     * - Sequential execution is required
-     * - All operations are blocking anyway
+     * Runs synchronously on boundedElastic inside Flux.create().
+     * Multiple sink.next() calls per iteration are allowed.
      *
-     * Multiple sink.next() calls per iteration are allowed
-     * by Flux.create() — this is the key difference from
-     * Flux.generate() which only allows one per iteration.
+     * Checks sink.isCancelled() at the start of
+     * each iteration. If the SSE client disconnects, the loop
+     * exits immediately instead of continuing to call Ollama
+     * and saving steps for up to 120 seconds.
+     *
+     * Captures currentStep = stepIndex at the top
+     * of each iteration. All events from one AI response use the
+     * same stepIndex (THINK + FINAL are the same logical step).
+     * stepIndex only increments ONCE per complete ReACT iteration,
+     * not once per event emitted.
      *
      * @param sink     FluxSink to emit events to
      * @param agent    the agent being executed
@@ -139,8 +147,26 @@ public class AgentExecutor {
         try {
             while (stepIndex < MAX_STEPS) {
 
+                // Honor subscriber cancellation.
+                // If SSE client disconnects → stop immediately.
+                // Without this: loop runs full 120s consuming
+                // boundedElastic threads for abandoned requests.
+                if (sink.isCancelled()) {
+                    log.info(
+                            "Agent cancelled by client: "
+                                    + "id={}",
+                            agent.id());
+                    return;
+                }
+
+                // Capture step index ONCE per iteration.
+                // THINK + FINAL in one AI response belong to the same
+                // logical step. All events use currentStep.
+                // stepIndex only increments once at end of iteration.
+                final int currentStep = stepIndex;
+
                 // Ask planner for next step
-                // STEP_TIMEOUT prevents hanging if Ollama slow
+                // STEP_TIMEOUT prevents hanging if Ollama is slow
                 String rawResponse = planner
                         .planNextStep(
                                 agent.goal(),
@@ -160,66 +186,62 @@ public class AgentExecutor {
                 }
 
                 // ── Emit THINK event ─────────────────
-                // Multiple sink.next() allowed in Flux.create()
-                // This would have crashed with Flux.generate()
+                // Uses currentStep — same index as other events
+                // this iteration (they are all one logical step)
                 if (plan.thought() != null
                         && !plan.thought().isBlank()) {
 
                     saveStep(AgentStep.createThink(
                             agent.id(), userId,
-                            stepIndex,
+                            currentStep,    // FIX: not stepIndex
                             plan.thought()))
                             .block();
 
-                    // sink.next() call #1 this iteration
                     sink.next(AgentEvent.think(
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.thought()));
 
                     history.append("THOUGHT: ")
                             .append(plan.thought())
                             .append("\n");
-                    stepIndex++;
+
+                    // NOTE: stepIndex NOT incremented here
+                    // Will increment once at end of iteration
                 }
 
                 // ── Emit FINAL event ─────────────────
-                // May happen in SAME iteration as THINK above
-                // sink.next() call #2 — only works with create()
+                // Same currentStep as THINK above.
+                // They are the same logical ReACT step.
                 if (plan.isFinal()) {
 
                     saveStep(AgentStep.createFinal(
                             agent.id(), userId,
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.finalAnswer()))
                             .block();
 
-                    // sink.next() call #2 — WORKS with create()
-                    // CRASHED with generate() (only 1 allowed)
                     sink.next(AgentEvent.finalAnswer(
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.finalAnswer()));
 
-                    // Complete the stream — agent done
                     sink.complete();
                     return;
                 }
 
                 // ── Emit ACT + OBSERVE events ─────────
-                // Three sink.next() calls possible:
-                // THINK (above) + ACT + OBSERVE this iteration
-                // All allowed by Flux.create()
+                // ACT and OBSERVE share currentStep with THINK.
+                // They all represent one ReACT iteration.
                 if (plan.isAction()) {
 
-                    // Save and emit ACT step
                     saveStep(AgentStep.createAct(
                             agent.id(), userId,
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.toolName(),
                             plan.toolInput()))
                             .block();
 
                     sink.next(AgentEvent.act(
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.toolName(),
                             plan.toolInput()));
 
@@ -228,54 +250,58 @@ public class AgentExecutor {
                             .append("\nINPUT: ")
                             .append(plan.toolInput())
                             .append("\n");
-                    stepIndex++;
 
                     // Execute the tool (blocking call)
                     String toolResult = executeTool(
                             plan.toolName(),
                             plan.toolInput());
 
-                    // Save and emit OBSERVE step
                     saveStep(AgentStep.createObserve(
                             agent.id(), userId,
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.toolName(),
                             toolResult))
                             .block();
 
                     sink.next(AgentEvent.observe(
-                            stepIndex,
+                            currentStep,    // FIX: same step
                             plan.toolName(),
                             toolResult));
 
                     history.append("OBSERVATION: ")
                             .append(toolResult)
                             .append("\n\n");
-                    stepIndex++;
                 }
 
-                // ── Handle ERROR from planner ─────────
+                // ── Handle planner ERROR ──────────────
                 if (plan.isError()) {
                     sink.next(AgentEvent.error(
                             plan.error()));
                     sink.complete();
                     return;
                 }
+
+                // Increment ONCE per ReACT iteration.
+                // Not once per event emitted.
+                // One iteration = THINK + (FINAL or ACT+OBSERVE)
+                stepIndex++;
             }
 
-            // Reached MAX_STEPS without FINAL
+            // Reached MAX_STEPS without completing
             log.warn(
-                    "Agent hit max steps: id={} steps={}",
+                    "Agent hit max steps: "
+                            + "id={} steps={}",
                     agent.id(), MAX_STEPS);
             sink.next(AgentEvent.error(
-                    "Maximum steps (" + MAX_STEPS
+                    "Maximum steps ("
+                            + MAX_STEPS
                             + ") reached without completing"));
             sink.complete();
 
         } catch (Exception error) {
-            // Any unhandled exception → error event
             log.error(
-                    "Agent loop failed: id={} error={}",
+                    "Agent loop failed: "
+                            + "id={} error={}",
                     agent.id(),
                     error.getMessage());
             sink.error(error);
@@ -287,15 +313,24 @@ public class AgentExecutor {
     /**
      * Execute a tool by name with given input.
      *
-     * Scans all registered JarvisTool beans for
-     * @Tool annotated methods matching the tool name.
-     * Case-insensitive matching handles AI variations.
+     * Scans registered JarvisTool beans for @Tool
+     * annotated methods matching the tool name.
+     *
+     * Exact case-insensitive matching only.
+     * Previous substring match was dangerous:
+     * - "webSearch" matched "search" (wrong tool)
+     * - "please calculate this" matched "calculate" (wrong context)
+     * - Tool dispatch depended on reflection ordering
+     *
+     * Now: methodName.equalsIgnoreCase(toolName.trim())
+     * AI must return the exact method name from the tool list.
+     * This is reliable because the system prompt shows exact names.
      *
      * Never throws — returns error string on failure.
      * Agent loop continues even if one tool fails.
      *
-     * @param toolName name returned by AI planner
-     * @param input    input string for the tool
+     * @param toolName exact method name from AI response
+     * @param input    input string for the tool method
      * @return tool result as string, never null
      */
     private String executeTool(
@@ -322,15 +357,13 @@ public class AgentExecutor {
 
                     String methodName = method.getName();
 
-                    // Case-insensitive match
-                    // Also handles partial matches from AI
+                    // FIX Issue 3: Exact match only.
+                    // Substring matching caused wrong tool dispatch:
+                    // "webSearch".contains("search") → true (wrong!)
+                    // "calculate this".contains("calculate") → true (wrong!)
                     boolean matches =
-                            methodName
-                                    .equalsIgnoreCase(toolName)
-                                    || toolName.toLowerCase()
-                                    .contains(
-                                            methodName
-                                                    .toLowerCase());
+                            methodName.equalsIgnoreCase(
+                                    toolName.trim());
 
                     if (matches) {
                         Object result =
@@ -341,8 +374,8 @@ public class AgentExecutor {
                                         - startMs;
 
                         log.info(
-                                "Tool executed: {}({}) "
-                                        + "in {}ms",
+                                "Tool executed: "
+                                        + "{}({}) in {}ms",
                                 methodName,
                                 input.length(),
                                 duration);
@@ -354,15 +387,21 @@ public class AgentExecutor {
                 }
             }
 
-            log.warn("Tool not found: {}", toolName);
+            log.warn(
+                    "Tool not found: '{}' — "
+                            + "available: {}",
+                    toolName,
+                    buildToolNames());
+
             return "Tool '" + toolName
                     + "' not found. "
-                    + "Available: "
+                    + "Available tools: "
                     + buildToolNames();
 
         } catch (Exception e) {
             log.error(
-                    "Tool execution failed: {} → {}",
+                    "Tool execution failed: "
+                            + "{} → {}",
                     toolName, e.getMessage());
             return "Tool error: " + e.getMessage();
         }
@@ -371,13 +410,13 @@ public class AgentExecutor {
     // ── Private: Tool Discovery ───────────────────
 
     /**
-     * Build formatted tool list for planner prompt.
+     * Build formatted tool list for planner system prompt.
      *
-     * Scans all JarvisTool beans and extracts @Tool
-     * method names + descriptions for the system prompt.
-     * New tools are automatically included — no changes needed.
+     * Scans all JarvisTool beans and collects @Tool
+     * method names + descriptions. New tools added via
+     * @Component are automatically included.
      *
-     * @return formatted string: "- methodName: description\n..."
+     * @return formatted "- methodName: description\n..."
      */
     private String buildToolList() {
         Map<String, String> tools = new LinkedHashMap<>();
@@ -405,8 +444,9 @@ public class AgentExecutor {
     }
 
     /**
-     * Comma-separated list of all tool method names.
-     * Shown in error when requested tool is not found.
+     * Comma-separated list of all @Tool method names.
+     * Shown in error message when requested tool not found.
+     * Helps AI correct its tool name in the next step.
      *
      * @return "getWeather, calculate, search, ..."
      */
@@ -431,13 +471,13 @@ public class AgentExecutor {
     }
 
     /**
-     * Save an agent step to DB.
+     * Persist an agent step to DB.
      *
-     * Errors are logged but never propagate.
-     * Step persistence failure must not stop the agent
-     * from completing its task — best-effort only.
+     * Errors logged but never propagated.
+     * Step persistence failure must not stop execution —
+     * the agent's task is more important than the audit trail.
      *
-     * @param step the step to persist
+     * @param step the AgentStep to persist
      * @return Mono<AgentStep> the saved step
      */
     private Mono<AgentStep> saveStep(AgentStep step) {
@@ -446,15 +486,14 @@ public class AgentExecutor {
                 .doOnSuccess(saved ->
                         log.debug(
                                 "Step saved: type={} "
-                                        + "index={}",
+                                        + "step={}",
                                 saved.stepType(),
                                 saved.stepIndex()))
                 .onErrorResume(error -> {
                     log.warn(
                             "Step save failed: {}",
                             error.getMessage());
-                    // Return original step on failure
-                    // Agent continues regardless
+                    // Return original — agent continues
                     return Mono.just(step);
                 });
     }
