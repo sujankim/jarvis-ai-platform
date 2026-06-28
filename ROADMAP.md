@@ -154,13 +154,13 @@ GET  /api/v1/voice/status      (availability check)
 ```
 ---
 
-## 🤖 Phase 6 — Agents 📋 Planned (`v0.6.0`)
+## 🤖 Phase 6 — Agents ✅ Core Complete
 
-* 📋 ReACT pattern (`Reason → Act → Observe`)
-* 📋 `AgentPlanner` + `AgentExecutor`
-* 📋 Multi-step workflow persistence
-* 📋 Multi-agent collaboration
-* 📋 Agents use Phase 4 tools natively
+* ✅ ReACT pattern (`Reason → Act → Observe`)
+* ✅ `AgentPlanner` + `AgentExecutor`
+* ✅ Multi-step workflow persistence
+* ✅ Multi-agent collaboration
+* ✅ Agents use Phase 4 tools natively
 
 ---
 

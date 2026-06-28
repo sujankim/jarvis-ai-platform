@@ -59,8 +59,8 @@ It is a **modular AI orchestration platform** that runs entirely on your own mac
 | Phase 3 | v0.3.0  | RAG Engine           | ✅ Core Complete   |
 | Phase 4 | v0.4.0  | Tool Engine          | ✅ Core Complete   |
 | Phase 5 | v0.5.0  | Voice Assistant      | ✅ Core Complete   |
-| Phase 6 | v0.6.0  | Agent System         | 📋 Next           |
-| Phase 7 | v1.0.0  | Web UI               | 📋 Planned        |
+| Phase 6 | v0.6.0 | Agent System | ✅ Core Complete |
+| Phase 7 | v1.0.0 | Web UI       | 📋 Next         |
 
 ---
 
