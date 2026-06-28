@@ -211,24 +211,26 @@ public class CalculatorTool implements JarvisTool {
      * @return sanitized expression or null if invalid
      */
     private String sanitize(String expression) {
-        // Replace ^ with ** for evaluation
-        String cleaned = expression
-                .trim()
-                .replace("^", "**")
-                .replace("sqrt(", "Math.sqrt(")
-                .replace("√", "Math.sqrt");
+    if (expression == null) {
+        return null;
+    }
+        String cleaned = expression.trim()
+        // Normalize Unicode and Python-style exponent only
+        .replace("√", "sqrt(")
+        .replace("**", "^");
 
-        // Check for invalid characters
-        // Allow: digits, operators, parens, dots,
-        //        spaces, and known function names
+        // Do NOT convert:
+        // ^      -&gt; **
+        // sqrt() -&gt; Math.sqrt()
+
         if (!cleaned.matches(
-                "[0-9+\\-*/()., " +
-                        "Math.sqrte%!\n\t]*")) {
-            return null;
+                "[0-9+\\-*/().^, sqrt\\n\\t]*")) {
+                return null;
         }
 
         return cleaned;
-    }
+
+        }
 
     /**
      * Evaluate mathematical expression safely.

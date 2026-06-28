@@ -8,6 +8,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.context.ImportTestcontainers;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+
 
 import java.time.LocalDate;
 import java.util.List;
@@ -162,7 +165,7 @@ class DateTimeToolIntegrationTest {
 
         assertThat(result)
                 .as("[%s] Result must contain the current year", zoneId)
-                .contains(String.valueOf(LocalDate.now().getYear()));
+                .contains(String.valueOf(ZonedDateTime.now(ZoneId.of(zoneId.trim())).getYear()));
 
         assertThat(result)
                 .as("[%s] Result must contain a time component", zoneId)

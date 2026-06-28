@@ -102,8 +102,8 @@ public class DateTimeTool implements JarvisTool {
             ZonedDateTime now =
                     ZonedDateTime.now(zoneId);
 
-            String zoneName = TimeZone.getTimeZone(zoneId)
-        .getDisplayName(false, TimeZone.LONG, Locale.ENGLISH);
+            boolean isDst = TimeZone.getTimeZone(zoneId).inDaylightTime(java.util.Date.from(now.toInstant()));
+            String zoneName = TimeZone.getTimeZone(zoneId).getDisplayName(isDst,TimeZone.LONG, Locale.ENGLISH);
             String result = now.format(FULL_FORMATTER)
                     + " (" + zoneName + ")";
 
