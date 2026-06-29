@@ -21,6 +21,7 @@ import org.springframework.test.context.TestPropertySource;
         "spring.ai.google.genai.api-key=",
 
         // ── Database ─────────────────────────────────
+        "spring.flyway.enabled=false",
         "spring.r2dbc.url="
                 + "r2dbc:postgresql://localhost:5433/jarvis",
         "spring.datasource.url="
@@ -47,6 +48,7 @@ class JarvisApplicationTests {
         // Requires: docker-compose up -d
         // PostgreSQL on port 5433
         // Redis on port 6379
-        // Ollama running (or test will skip AI calls)
+        // Flyway disabled - migrations skipped for speed
+        // R2DBC pool still requires PostgreSQL connection
     }
 }
