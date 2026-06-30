@@ -25,290 +25,345 @@ import static org.mockito.Mockito.when;
 @DisplayName("AgentExecutor Tests")
 class AgentExecutorTest {
 
-    @Mock
-    private AgentPlanner planner;
+        @Mock
+        private AgentPlanner planner;
 
-    @Mock
-    private R2dbcEntityTemplate r2dbcEntityTemplate;
+        @Mock
+        private R2dbcEntityTemplate r2dbcEntityTemplate;
 
-    private AgentExecutor executor;
-    private Agent testAgent;
-    private UUID userId;
+        private AgentExecutor executor;
+        private Agent testAgent;
+        private UUID userId;
 
-    @BeforeEach
-    void setUp() {
-        // Real CalculatorTool — no mock needed
-        // Tests actual tool discovery + execution
-        CalculatorTool calcTool = new CalculatorTool();
-        ToolRegistry registry = new ToolRegistry(
-                List.of(calcTool));
+        @BeforeEach
+        void setUp() {
+                CalculatorTool calcTool = new CalculatorTool();
+                ToolRegistry registry = new ToolRegistry(List.of(calcTool));
 
-        executor = new AgentExecutor(
-                planner, registry,
-                r2dbcEntityTemplate);
+                executor = new AgentExecutor(planner, registry, r2dbcEntityTemplate);
+                userId = UUID.randomUUID();
+                testAgent = Agent.create(userId, null, "What is 25 * 4?").withRunning();
+        }
 
-        userId = UUID.randomUUID();
+        // ── EXISTING AGENT EVENT FACTORY TESTS ───────────────
 
-        // Agent must be RUNNING for execution
-        // create() → PENDING, withRunning() → RUNNING
-        testAgent = Agent.create(
-                        userId, null, "What is 25 * 4?")
-                .withRunning();
-    }
+        @Test
+        @DisplayName("AgentEvent.think() creates THINK event with correct fields")
+        void shouldCreateThinkEvent() {
+                AgentEvent event = AgentEvent.think(0, "I need to calculate");
 
-    // ── AgentEvent factory tests ──────────────────
-    // These test the event record directly
-    // No mocking needed — pure unit tests
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.THINK);
+                assertThat(event.data()).isEqualTo("I need to calculate");
+                assertThat(event.stepIndex()).isEqualTo(0);
+                assertThat(event.toolName()).isNull();
+        }
 
-    @Test
-    @DisplayName("AgentEvent.think() creates THINK event with correct fields")
-    void shouldCreateThinkEvent() {
-        AgentEvent event =
-                AgentEvent.think(0, "I need to calculate");
+        @Test
+        @DisplayName("AgentEvent.act() creates ACT event with tool info")
+        void shouldCreateActEvent() {
+                AgentEvent event = AgentEvent.act(1, "calculate", "25 * 4");
 
-        assertThat(event.type())
-                .isEqualTo(AgentEvent.EventType.THINK);
-        assertThat(event.data())
-                .isEqualTo("I need to calculate");
-        assertThat(event.stepIndex()).isEqualTo(0);
-        // THINK events have no toolName
-        assertThat(event.toolName()).isNull();
-    }
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.ACT);
+                assertThat(event.toolName()).isEqualTo("calculate");
+                assertThat(event.data()).isEqualTo("25 * 4");
+                assertThat(event.stepIndex()).isEqualTo(1);
+        }
 
-    @Test
-    @DisplayName("AgentEvent.act() creates ACT event with tool info")
-    void shouldCreateActEvent() {
-        AgentEvent event =
-                AgentEvent.act(1, "calculate", "25 * 4");
+        @Test
+        @DisplayName("AgentEvent.observe() creates OBSERVE event with result")
+        void shouldCreateObserveEvent() {
+                AgentEvent event = AgentEvent.observe(2, "calculate", "100");
 
-        assertThat(event.type())
-                .isEqualTo(AgentEvent.EventType.ACT);
-        assertThat(event.toolName())
-                .isEqualTo("calculate");
-        assertThat(event.data())
-                .isEqualTo("25 * 4");
-        assertThat(event.stepIndex()).isEqualTo(1);
-    }
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.OBSERVE);
+                assertThat(event.data()).isEqualTo("100");
+                assertThat(event.toolName()).isEqualTo("calculate");
+                assertThat(event.stepIndex()).isEqualTo(2);
+        }
 
-    @Test
-    @DisplayName("AgentEvent.observe() creates OBSERVE event with result")
-    void shouldCreateObserveEvent() {
-        AgentEvent event =
-                AgentEvent.observe(
-                        2, "calculate", "100");
+        @Test
+        @DisplayName("AgentEvent.finalAnswer() creates FINAL event")
+        void shouldCreateFinalEvent() {
+                AgentEvent event = AgentEvent.finalAnswer(3, "The answer is 100");
 
-        assertThat(event.type())
-                .isEqualTo(AgentEvent.EventType.OBSERVE);
-        assertThat(event.data()).isEqualTo("100");
-        assertThat(event.toolName())
-                .isEqualTo("calculate");
-        assertThat(event.stepIndex()).isEqualTo(2);
-    }
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.FINAL);
+                assertThat(event.data()).isEqualTo("The answer is 100");
+                assertThat(event.stepIndex()).isEqualTo(3);
+                assertThat(event.toolName()).isNull();
+        }
 
-    @Test
-    @DisplayName("AgentEvent.finalAnswer() creates FINAL event")
-    void shouldCreateFinalEvent() {
-        AgentEvent event =
-                AgentEvent.finalAnswer(
-                        3, "The answer is 100");
+        @Test
+        @DisplayName("AgentEvent.error() creates ERROR event with stepIndex -1")
+        void shouldCreateErrorEvent() {
+                AgentEvent event = AgentEvent.error("something broke");
 
-        assertThat(event.type())
-                .isEqualTo(AgentEvent.EventType.FINAL);
-        assertThat(event.data())
-                .isEqualTo("The answer is 100");
-        assertThat(event.stepIndex()).isEqualTo(3);
-        // FINAL events have no toolName
-        assertThat(event.toolName()).isNull();
-    }
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.ERROR);
+                assertThat(event.data()).isEqualTo("something broke");
+                assertThat(event.stepIndex()).isEqualTo(-1);
+                assertThat(event.toolName()).isNull();
+        }
 
-    @Test
-    @DisplayName("AgentEvent.error() creates ERROR event with stepIndex -1")
-    void shouldCreateErrorEvent() {
-        AgentEvent event =
-                AgentEvent.error("something broke");
+        // ── EXISTING EXECUTE() TESTS ─────────────────────────
 
-        assertThat(event.type())
-                .isEqualTo(AgentEvent.EventType.ERROR);
-        assertThat(event.data())
-                .isEqualTo("something broke");
-        // stepIndex -1 indicates non-step error
-        assertThat(event.stepIndex()).isEqualTo(-1);
-        assertThat(event.toolName()).isNull();
-    }
+        @Test
+        @DisplayName("execute() emits FINAL event when AI gives direct answer")
+        void shouldEmitFinalEventOnDirectAnswer() {
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just("FINAL_ANSWER: The answer is 100"));
+                when(planner.parseResponse("FINAL_ANSWER: The answer is 100"))
+                                .thenReturn(PlanResult.finalAnswer(null, "The answer is 100"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-    // ── execute() tests ───────────────────────────
-    // These test the full ReACT loop with mocked planner
-    // r2dbcEntityTemplate mocked to avoid DB dependency
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL &&
+                                                event.data().equals("The answer is 100"))
+                                .verifyComplete();
+        }
 
-    @Test
-    @DisplayName("execute() emits FINAL event when AI gives direct answer")
-    void shouldEmitFinalEventOnDirectAnswer() {
-        // Planner returns FINAL immediately — no tool call
-        when(planner.formatToolList(any()))
-                .thenReturn("calculate: math");
+        @Test
+        @DisplayName("execute() emits THINK then FINAL when AI thinks first")
+        void shouldEmitThinkThenFinal() {
+                String aiResponse = "THOUGHT: I have enough info\nFINAL_ANSWER: The answer is 100";
 
-        when(planner.planNextStep(
-                anyString(), anyString(), anyString()))
-                .thenReturn(Mono.just(
-                        "FINAL_ANSWER: The answer is 100"));
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(aiResponse));
+                when(planner.parseResponse(aiResponse))
+                                .thenReturn(PlanResult.finalAnswer("I have enough info", "The answer is 100"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        // parseResponse called with the raw AI text
-        when(planner.parseResponse(
-                "FINAL_ANSWER: The answer is 100"))
-                .thenReturn(PlanResult.finalAnswer(
-                        null,
-                        "The answer is 100"));
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK &&
+                                                event.data().equals("I have enough info"))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL &&
+                                                event.data().equals("The answer is 100"))
+                                .verifyComplete();
+        }
 
-        // Mock DB save — return the step as-is
-        when(r2dbcEntityTemplate.insert(
-                any(AgentStep.class)))
-                .thenAnswer(inv ->
-                        Mono.just(inv.getArgument(0)));
+        @Test
+        @DisplayName("execute() emits ACT and OBSERVE when AI calls a tool")
+        void shouldEmitActAndObserve() {
+                String firstResponse = "THOUGHT: Need to calculate\nACTION: calculate\nINPUT: 25 * 4";
+                String secondResponse = "FINAL_ANSWER: 25 * 4 = 100";
 
-        StepVerifier
-                .create(executor.execute(
-                        testAgent, userId))
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.FINAL
-                                && event.data().equals(
-                                "The answer is 100"))
-                .verifyComplete();
-    }
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(firstResponse), Mono.just(secondResponse));
+                when(planner.parseResponse(firstResponse))
+                                .thenReturn(PlanResult.action("Need to calculate", "calculate", "25 * 4"));
+                when(planner.parseResponse(secondResponse))
+                                .thenReturn(PlanResult.finalAnswer(null, "25 * 4 = 100"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-    @Test
-    @DisplayName("execute() emits THINK then FINAL when AI thinks first")
-    void shouldEmitThinkThenFinal() {
-        // AI returns THOUGHT + FINAL_ANSWER in one response
-        // This is the scenario that crashed Flux.generate()
-        // because it required two sink.next() calls:
-        // #1: THINK event, #2: FINAL event
-        // Flux.create() handles this correctly
-        String aiResponse =
-                "THOUGHT: I have enough info\n"
-                        + "FINAL_ANSWER: The answer is 100";
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.ACT &&
+                                                event.toolName().equals("calculate"))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.OBSERVE)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL)
+                                .verifyComplete();
+        }
 
-        when(planner.formatToolList(any()))
-                .thenReturn("calculate: math");
+        @Test
+        @DisplayName("execute() emits ERROR when planner throws")
+        void shouldEmitErrorOnPlannerFailure() {
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.error(new RuntimeException("AI unavailable")));
 
-        when(planner.planNextStep(
-                anyString(), anyString(), anyString()))
-                .thenReturn(Mono.just(aiResponse));
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.ERROR &&
+                                                event.data().contains("AI unavailable"))
+                                .verifyComplete();
+        }
 
-        // Parse returns FINAL with thought populated
-        when(planner.parseResponse(aiResponse))
-                .thenReturn(PlanResult.finalAnswer(
-                        "I have enough info",
-                        "The answer is 100"));
+        // ── NEW TESTS FOR AGENT EVENT VALIDATION ─────────────
 
-        when(r2dbcEntityTemplate.insert(
-                any(AgentStep.class)))
-                .thenAnswer(inv ->
-                        Mono.just(inv.getArgument(0)));
+        @Test
+        @DisplayName("AgentEvent THINK event has toolName null")
+        void thinkEventShouldHaveNullToolName() {
+                AgentEvent event = AgentEvent.think(5, "reasoning");
 
-        StepVerifier
-                .create(executor.execute(
-                        testAgent, userId))
-                // THINK emitted first (thought not null)
-                // This was the FIRST sink.next() call
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.THINK
-                                && event.data().equals(
-                                "I have enough info"))
-                // FINAL emitted second
-                // This was the SECOND sink.next() call
-                // Only works with Flux.create()
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.FINAL
-                                && event.data().equals(
-                                "The answer is 100"))
-                .verifyComplete();
-    }
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.THINK);
+                assertThat(event.toolName()).isNull();
+                assertThat(event.stepIndex()).isEqualTo(5);
+                assertThat(event.data()).isEqualTo("reasoning");
+        }
 
-    @Test
-    @DisplayName("execute() emits ACT and OBSERVE when AI calls a tool")
-    void shouldEmitActAndObserve() {
-        // First call: AI wants to call calculator
-        String firstResponse =
-                "THOUGHT: Need to calculate\n"
-                        + "ACTION: calculate\n"
-                        + "INPUT: 25 * 4";
+        @Test
+        @DisplayName("AgentEvent FINAL event has toolName null")
+        void finalEventShouldHaveNullToolName() {
+                AgentEvent event = AgentEvent.finalAnswer(3, "answer");
 
-        // Second call: AI gives final answer
-        String secondResponse =
-                "FINAL_ANSWER: 25 * 4 = 100";
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.FINAL);
+                assertThat(event.toolName()).isNull();
+                assertThat(event.stepIndex()).isEqualTo(3);
+                assertThat(event.data()).isEqualTo("answer");
+        }
 
-        when(planner.formatToolList(any()))
-                .thenReturn("calculate: math");
+        @Test
+        @DisplayName("AgentEvent ERROR event has stepIndex -1")
+        void errorEventShouldHaveStepIndexNegativeOne() {
+                AgentEvent event = AgentEvent.error("error message");
 
-        when(planner.planNextStep(
-                anyString(), anyString(), anyString()))
-                .thenReturn(
-                        Mono.just(firstResponse),
-                        Mono.just(secondResponse));
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.ERROR);
+                assertThat(event.stepIndex()).isEqualTo(-1);
+                assertThat(event.toolName()).isNull();
+                assertThat(event.data()).isEqualTo("error message");
+        }
 
-        when(planner.parseResponse(firstResponse))
-                .thenReturn(PlanResult.action(
-                        "Need to calculate",
-                        "calculate",
-                        "25 * 4"));
+        @Test
+        @DisplayName("AgentEvent ACT event has toolName populated")
+        void actEventShouldHaveToolNamePopulated() {
+                AgentEvent event = AgentEvent.act(2, "testTool", "input data");
 
-        when(planner.parseResponse(secondResponse))
-                .thenReturn(PlanResult.finalAnswer(
-                        null, "25 * 4 = 100"));
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.ACT);
+                assertThat(event.toolName()).isEqualTo("testTool");
+                assertThat(event.data()).isEqualTo("input data");
+                assertThat(event.stepIndex()).isEqualTo(2);
+        }
 
-        when(r2dbcEntityTemplate.insert(
-                any(AgentStep.class)))
-                .thenAnswer(inv ->
-                        Mono.just(inv.getArgument(0)));
+        @Test
+        @DisplayName("AgentEvent OBSERVE event has toolName populated")
+        void observeEventShouldHaveToolNamePopulated() {
+                AgentEvent event = AgentEvent.observe(4, "resultTool", "result data");
 
-        StepVerifier
-                .create(executor.execute(
-                        testAgent, userId))
-                // THINK from first response
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.THINK)
-                // ACT — tool being called
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.ACT
-                                && event.toolName()
-                                .equals("calculate"))
-                // OBSERVE — tool result
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.OBSERVE)
-                // FINAL — second AI call
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.FINAL)
-                .verifyComplete();
-    }
+                assertThat(event.type()).isEqualTo(AgentEvent.EventType.OBSERVE);
+                assertThat(event.toolName()).isEqualTo("resultTool");
+                assertThat(event.data()).isEqualTo("result data");
+                assertThat(event.stepIndex()).isEqualTo(4);
+        }
 
-    @Test
-    @DisplayName("execute() emits ERROR when planner throws")
-    void shouldEmitErrorOnPlannerFailure() {
-        when(planner.formatToolList(any()))
-                .thenReturn("calculate: math");
+        // ── NEW TESTS FOR EXECUTION EDGE CASES ───────────────
 
-        // Planner throws — agent should gracefully emit ERROR
-        when(planner.planNextStep(
-                anyString(), anyString(), anyString()))
-                .thenReturn(Mono.error(
-                        new RuntimeException(
-                                "AI unavailable")));
+        @Test
+        @DisplayName("execute() continues when tool returns error string")
+        void shouldContinueWhenToolReturnsError() {
+                String firstResponse = "THOUGHT: Need to calculate\nACTION: calculate\nINPUT: invalid!";
+                String secondResponse = "FINAL_ANSWER: The tool failed, please try again";
 
-        StepVerifier
-                .create(executor.execute(
-                        testAgent, userId))
-                .expectNextMatches(event ->
-                        event.type() ==
-                                AgentEvent.EventType.ERROR
-                                && event.data()
-                                .contains("AI unavailable"))
-                .verifyComplete();
-    }
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(firstResponse), Mono.just(secondResponse));
+                when(planner.parseResponse(firstResponse))
+                                .thenReturn(PlanResult.action("Need to calculate", "calculate", "invalid!"));
+                when(planner.parseResponse(secondResponse))
+                                .thenReturn(PlanResult.finalAnswer(null, "The tool failed, please try again"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.ACT)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.OBSERVE &&
+                                                (event.data().contains("error") || event.data().contains("Error")))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL)
+                                .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("execute() emits ERROR and completes when MAX_STEPS reached")
+        void shouldEmitErrorOnMaxSteps() {
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+                String actionResponse = "THOUGHT: Step\nACTION: calculate\nINPUT: 25 * 4";
+
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(actionResponse));
+                when(planner.parseResponse(actionResponse))
+                                .thenReturn(PlanResult.action("Step", "calculate", "25 * 4"));
+
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextCount(30)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.ERROR &&
+                                                event.data().contains("Maximum steps"))
+                                .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("executeTool() returns helpful error when tool not found")
+        void shouldReturnHelpfulErrorWhenToolNotFound() {
+                // Arrange: First call - AI asks for non-existent tool
+                String firstResponse = "THOUGHT: Need a tool\nACTION: nonExistentTool\nINPUT: test";
+
+                // Second call - AI should realize the tool doesn't exist and give final answer
+                String secondResponse = "FINAL_ANSWER: The tool nonExistentTool was not found. Available tools: calculate";
+
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(firstResponse), Mono.just(secondResponse));
+                when(planner.parseResponse(firstResponse))
+                                .thenReturn(PlanResult.action("Need a tool", "nonExistentTool", "test"));
+                when(planner.parseResponse(secondResponse))
+                                .thenReturn(PlanResult.finalAnswer(null,
+                                                "The tool nonExistentTool was not found. Available tools: calculate"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+                // Act & Assert
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.ACT)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.OBSERVE &&
+                                                event.data().contains("not found") &&
+                                                (event.data().contains("calculate")
+                                                                || event.data().contains("available")))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL)
+                                .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("executeTool() error message includes available tools")
+        void shouldIncludeAvailableToolsInErrorMessage() {
+                // Arrange: First call - AI asks for missing tool
+                String firstResponse = "THOUGHT: Find a tool\nACTION: missingTool\nINPUT: data";
+
+                // Second call - AI gives final answer acknowledging the error
+                String secondResponse = "FINAL_ANSWER: Tool missingTool not found. Available: calculate";
+
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(firstResponse), Mono.just(secondResponse));
+                when(planner.parseResponse(firstResponse))
+                                .thenReturn(PlanResult.action("Find a tool", "missingTool", "data"));
+                when(planner.parseResponse(secondResponse))
+                                .thenReturn(PlanResult.finalAnswer(null,
+                                                "Tool missingTool not found. Available: calculate"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+                // Act & Assert
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.ACT)
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.OBSERVE &&
+                                                event.data().contains("Tool") &&
+                                                event.data().contains("missingTool") &&
+                                                event.data().contains("Available tools"))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL)
+                                .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("execute() handles step persistence failure gracefully")
+        void shouldHandleStepPersistenceFailure() {
+                String response = "FINAL_ANSWER: The answer is 100";
+
+                when(planner.formatToolList(any())).thenReturn("calculate: math");
+                when(planner.planNextStep(anyString(), anyString(), anyString()))
+                                .thenReturn(Mono.just(response));
+                when(planner.parseResponse(response))
+                                .thenReturn(PlanResult.finalAnswer(null, "The answer is 100"));
+                when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
+                                .thenReturn(Mono.error(new RuntimeException("DB connection failed")));
+
+                StepVerifier.create(executor.execute(testAgent, userId))
+                                .expectNextMatches(event -> event.type() == AgentEvent.EventType.FINAL)
+                                .verifyComplete();
+        }
 }
