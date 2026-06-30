@@ -28,8 +28,6 @@ class AgentPlannerTest {
                 planner = new AgentPlanner(chatClientBuilder);
         }
 
-        // ── EXISTING TESTS ────────────────────────────────────
-
         @Test
         @DisplayName("parseResponse() extracts ACTION correctly")
         void shouldParseActionResponse() {
@@ -119,8 +117,6 @@ class AgentPlannerTest {
                 assertThat(result.toolName()).isEqualTo("getCurrentDateTime");
                 assertThat(result.toolInput()).isEmpty();
         }
-
-        // ── NEW TESTS FOR PARSE RESPONSE EDGE CASES ──────────
 
         @Test
         @DisplayName("parseResponse() handles response with no THOUGHT/ACTION/FINAL labels")
@@ -222,8 +218,6 @@ class AgentPlannerTest {
                 assertThat(result.finalAnswer()).contains("thought: I need to calculate");
         }
 
-        // ── NEW TESTS FOR FORMAT TOOL LIST EDGE CASES ────────
-
         @Test
         @DisplayName("formatToolList() handles single registered tool")
         void shouldFormatSingleTool() {
@@ -286,8 +280,6 @@ class AgentPlannerTest {
                 assertThat(firstPos).isLessThan(secondPos);
                 assertThat(secondPos).isLessThan(thirdPos);
         }
-
-        // ── PlanResult Factory Tests ─────────────────────────
 
         @Test
         @DisplayName("PlanResult.thought() creates THOUGHT type")
