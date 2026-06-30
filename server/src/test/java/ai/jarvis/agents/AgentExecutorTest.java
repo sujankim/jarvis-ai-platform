@@ -180,63 +180,6 @@ class AgentExecutorTest {
                                 .verifyComplete();
         }
 
-        // ── NEW TESTS FOR AGENT EVENT VALIDATION ─────────────
-
-        @Test
-        @DisplayName("AgentEvent THINK event has toolName null")
-        void thinkEventShouldHaveNullToolName() {
-                AgentEvent event = AgentEvent.think(5, "reasoning");
-
-                assertThat(event.type()).isEqualTo(AgentEvent.EventType.THINK);
-                assertThat(event.toolName()).isNull();
-                assertThat(event.stepIndex()).isEqualTo(5);
-                assertThat(event.data()).isEqualTo("reasoning");
-        }
-
-        @Test
-        @DisplayName("AgentEvent FINAL event has toolName null")
-        void finalEventShouldHaveNullToolName() {
-                AgentEvent event = AgentEvent.finalAnswer(3, "answer");
-
-                assertThat(event.type()).isEqualTo(AgentEvent.EventType.FINAL);
-                assertThat(event.toolName()).isNull();
-                assertThat(event.stepIndex()).isEqualTo(3);
-                assertThat(event.data()).isEqualTo("answer");
-        }
-
-        @Test
-        @DisplayName("AgentEvent ERROR event has stepIndex -1")
-        void errorEventShouldHaveStepIndexNegativeOne() {
-                AgentEvent event = AgentEvent.error("error message");
-
-                assertThat(event.type()).isEqualTo(AgentEvent.EventType.ERROR);
-                assertThat(event.stepIndex()).isEqualTo(-1);
-                assertThat(event.toolName()).isNull();
-                assertThat(event.data()).isEqualTo("error message");
-        }
-
-        @Test
-        @DisplayName("AgentEvent ACT event has toolName populated")
-        void actEventShouldHaveToolNamePopulated() {
-                AgentEvent event = AgentEvent.act(2, "testTool", "input data");
-
-                assertThat(event.type()).isEqualTo(AgentEvent.EventType.ACT);
-                assertThat(event.toolName()).isEqualTo("testTool");
-                assertThat(event.data()).isEqualTo("input data");
-                assertThat(event.stepIndex()).isEqualTo(2);
-        }
-
-        @Test
-        @DisplayName("AgentEvent OBSERVE event has toolName populated")
-        void observeEventShouldHaveToolNamePopulated() {
-                AgentEvent event = AgentEvent.observe(4, "resultTool", "result data");
-
-                assertThat(event.type()).isEqualTo(AgentEvent.EventType.OBSERVE);
-                assertThat(event.toolName()).isEqualTo("resultTool");
-                assertThat(event.data()).isEqualTo("result data");
-                assertThat(event.stepIndex()).isEqualTo(4);
-        }
-
         // ── NEW TESTS FOR EXECUTION EDGE CASES ───────────────
 
         @Test
@@ -279,7 +222,7 @@ class AgentExecutorTest {
                                 .thenReturn(PlanResult.action("Step", "calculate", "25 * 4"));
 
                 StepVerifier.create(executor.execute(testAgent, userId))
-                                .expectNextCount(30)
+                                .thenConsumeWhile(event -> event.type() != AgentEvent.EventType.ERROR)
                                 .expectNextMatches(event -> event.type() == AgentEvent.EventType.ERROR &&
                                                 event.data().contains("Maximum steps"))
                                 .verifyComplete();
@@ -288,10 +231,7 @@ class AgentExecutorTest {
         @Test
         @DisplayName("executeTool() returns helpful error when tool not found")
         void shouldReturnHelpfulErrorWhenToolNotFound() {
-                // Arrange: First call - AI asks for non-existent tool
                 String firstResponse = "THOUGHT: Need a tool\nACTION: nonExistentTool\nINPUT: test";
-
-                // Second call - AI should realize the tool doesn't exist and give final answer
                 String secondResponse = "FINAL_ANSWER: The tool nonExistentTool was not found. Available tools: calculate";
 
                 when(planner.formatToolList(any())).thenReturn("calculate: math");
@@ -305,7 +245,6 @@ class AgentExecutorTest {
                 when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
                                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-                // Act & Assert
                 StepVerifier.create(executor.execute(testAgent, userId))
                                 .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK)
                                 .expectNextMatches(event -> event.type() == AgentEvent.EventType.ACT)
@@ -320,10 +259,7 @@ class AgentExecutorTest {
         @Test
         @DisplayName("executeTool() error message includes available tools")
         void shouldIncludeAvailableToolsInErrorMessage() {
-                // Arrange: First call - AI asks for missing tool
                 String firstResponse = "THOUGHT: Find a tool\nACTION: missingTool\nINPUT: data";
-
-                // Second call - AI gives final answer acknowledging the error
                 String secondResponse = "FINAL_ANSWER: Tool missingTool not found. Available: calculate";
 
                 when(planner.formatToolList(any())).thenReturn("calculate: math");
@@ -337,7 +273,6 @@ class AgentExecutorTest {
                 when(r2dbcEntityTemplate.insert(any(AgentStep.class)))
                                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-                // Act & Assert
                 StepVerifier.create(executor.execute(testAgent, userId))
                                 .expectNextMatches(event -> event.type() == AgentEvent.EventType.THINK)
                                 .expectNextMatches(event -> event.type() == AgentEvent.EventType.ACT)

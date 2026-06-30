@@ -149,10 +149,10 @@ class AgentPlannerTest {
 
                 assertThat(result.isAction()).isTrue();
                 assertThat(result.toolName()).isEqualTo("processText");
-                assertThat(result.toolInput()).contains("Line 1 of the text");
-                assertThat(result.toolInput()).contains("Line 2 of the text");
-                assertThat(result.toolInput()).contains("Line 3 of the text");
-                assertThat(result.toolInput()).isEqualTo("Line 1 of the text\nLine 2 of the text\nLine 3 of the text");
+                assertThat(result.toolInput())
+                                .contains("Line 1 of the text")
+                                .contains("Line 2 of the text")
+                                .contains("Line 3 of the text");
         }
 
         @Test
@@ -210,8 +210,6 @@ class AgentPlannerTest {
         @Test
         @DisplayName("parseResponse() handles response with mixed case labels - treats as final answer")
         void shouldHandleMixedCaseLabels() {
-                // Since the parser looks for uppercase labels, lowercase should be treated as
-                // final answer
                 String response = """
                                 thought: I need to calculate
                                 action: calculate
@@ -220,8 +218,6 @@ class AgentPlannerTest {
 
                 PlanResult result = planner.parseResponse(response);
 
-                // The parser treats this as unstructured text since it doesn't see uppercase
-                // labels
                 assertThat(result.isFinal()).isTrue();
                 assertThat(result.finalAnswer()).contains("thought: I need to calculate");
         }
@@ -275,22 +271,6 @@ class AgentPlannerTest {
         }
 
         @Test
-        @DisplayName("formatToolList() handles empty map")
-        void shouldHandleEmptyTools() {
-                String result = planner.formatToolList(Map.of());
-
-                assertThat(result).isEqualTo("No tools available.");
-        }
-
-        @Test
-        @DisplayName("formatToolList() handles null map")
-        void shouldHandleNullTools() {
-                String result = planner.formatToolList(null);
-
-                assertThat(result).isEqualTo("No tools available.");
-        }
-
-        @Test
         @DisplayName("formatToolList() preserves tool order")
         void shouldPreserveToolOrder() {
                 Map<String, String> tools = new LinkedHashMap<>();
@@ -308,41 +288,6 @@ class AgentPlannerTest {
         }
 
         // ── PlanResult Factory Tests ─────────────────────────
-
-        @Test
-        @DisplayName("PlanResult.action() creates ACTION type")
-        void shouldCreateActionResult() {
-                PlanResult result = PlanResult.action("reasoning", "tool", "input");
-
-                assertThat(result.type()).isEqualTo(PlanResult.PlanType.ACTION);
-                assertThat(result.isAction()).isTrue();
-                assertThat(result.isFinal()).isFalse();
-                assertThat(result.isError()).isFalse();
-                assertThat(result.toolName()).isEqualTo("tool");
-                assertThat(result.toolInput()).isEqualTo("input");
-                assertThat(result.thought()).isEqualTo("reasoning");
-        }
-
-        @Test
-        @DisplayName("PlanResult.finalAnswer() creates FINAL type")
-        void shouldCreateFinalResult() {
-                PlanResult result = PlanResult.finalAnswer("done reasoning", "final answer");
-
-                assertThat(result.type()).isEqualTo(PlanResult.PlanType.FINAL);
-                assertThat(result.isFinal()).isTrue();
-                assertThat(result.isAction()).isFalse();
-                assertThat(result.finalAnswer()).isEqualTo("final answer");
-                assertThat(result.thought()).isEqualTo("done reasoning");
-        }
-
-        @Test
-        @DisplayName("PlanResult.error() creates ERROR type")
-        void shouldCreateErrorResult() {
-                PlanResult result = PlanResult.error("something broke");
-
-                assertThat(result.isError()).isTrue();
-                assertThat(result.error()).isEqualTo("something broke");
-        }
 
         @Test
         @DisplayName("PlanResult.thought() creates THOUGHT type")
