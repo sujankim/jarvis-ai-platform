@@ -167,8 +167,14 @@ public class ChatCommands {
                     System.out.print(token);
                     System.out.flush();
                 },
-                () -> {
+                stats -> {
                     System.out.println();
+                    if (stats.tokenCount() > 0) {
+                        System.out.printf(
+                                "── %d tokens · %.1fs ──%n",
+                                stats.tokenCount(),
+                                stats.durationSeconds());
+                    }
                     System.out.println();
                     System.out.flush();
                 },
