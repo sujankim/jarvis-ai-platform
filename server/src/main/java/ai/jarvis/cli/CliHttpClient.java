@@ -123,7 +123,7 @@ public class CliHttpClient {
             Object body,
             java.util.function.Consumer<String> onSession,
             java.util.function.Consumer<String> onToken,
-            Runnable onDone,
+            java.util.function.Consumer<StreamStats> onDone,
             java.util.function.Consumer<String> onError) {
 
         try {
@@ -132,6 +132,9 @@ public class CliHttpClient {
                     .WebClient.builder()
                     .baseUrl(BASE_URL)
                     .build();
+
+            long startNanos = System.nanoTime();
+            int[] tokenCount = {0};
 
             webClient
                     .post()
@@ -161,10 +164,14 @@ public class CliHttpClient {
                             String tokenText =
                                     parseJsonToken(event.data());
                             if (tokenText != null) {
+                                tokenCount[0]++;
                                 onToken.accept(tokenText);
                             }
                         } else if ("done".equals(eventType)) {
-                            onDone.run();
+                            double seconds = (System.nanoTime() - startNanos)
+                                    / 1_000_000_000.0;
+                            onDone.accept(new StreamStats(
+                                    tokenCount[0], seconds));
                         }
                     })
                     .doOnError(err ->
