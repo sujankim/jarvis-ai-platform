@@ -67,7 +67,7 @@
         <jjwt.version>0.12.7</jjwt.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <!-- Explicit versions for Flyway plugin classpath -->
-        <postgresql.version>42.7.11</postgresql.version>
+        <postgresql.version>42.7.12</postgresql.version>
         <flyway.version>11.14.1</flyway.version>
         <spring-shell.version>4.0.2</spring-shell.version>
     </properties>
