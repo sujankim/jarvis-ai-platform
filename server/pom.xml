@@ -55,7 +55,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>2.0.0-M8</spring-ai.version>
+        <spring-ai.version>2.0.0</spring-ai.version>
         <!-- RC1: Due June 11, 2026 -->
         <!-- GA:  Due June 4-11, 2026 -->
         <!-- Update when released: change version above -->
