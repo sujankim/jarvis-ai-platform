@@ -9,7 +9,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
+        <version>4.1.0</version>
         <relativePath/>
     </parent>
 
@@ -60,7 +60,7 @@
         <!-- GA:  Due June 4-11, 2026 -->
         <!-- Update when released: change version above -->
         <mapstruct.version>1.6.3</mapstruct.version>
-        <spring-shell.version>4.0.2</spring-shell.version>
+        <spring-shell.version>4.0.3</spring-shell.version>
         <lombok.version>1.18.46</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
         <bouncycastle.version>1.84</bouncycastle.version>
@@ -69,7 +69,7 @@
         <!-- Explicit versions for Flyway plugin classpath -->
         <postgresql.version>42.7.11</postgresql.version>
         <flyway.version>11.14.1</flyway.version>
-        <spring-shell.version>4.0.2</spring-shell.version>
+        <spring-shell.version>4.0.3</spring-shell.version>
     </properties>
 
     <repositories>
