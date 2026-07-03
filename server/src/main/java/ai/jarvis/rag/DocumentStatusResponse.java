@@ -9,5 +9,5 @@ public record DocumentStatusResponse(
         DocumentStatus status,
         int chunkCount,
         String errorMessage,
-        Instant completedAt) {
+        Instant updatedAt) {
 }

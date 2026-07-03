@@ -1,6 +1,5 @@
 package ai.jarvis.rag;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -63,9 +62,12 @@ class DocumentServiceTest {
 
         when(documentRepository.findByIdAndUserId(documentId, userId)).thenReturn(Mono.just(document));
 
-        Mono<DocumentStatusResponse> result = documentService.getDocumentByIdAndUserId(documentId, userId);
+        StepVerifier.create(documentService.getDocumentByIdAndUserId(documentId, userId))
+                .expectNextMatches(response ->
+                        response.filename().equals("test.txt")
+                                && response.id().equals(documentId))
+                .verifyComplete();
 
-        assertThat(result).isNotNull();
         verify(documentRepository).findByIdAndUserId(documentId, userId);
     }
 }
