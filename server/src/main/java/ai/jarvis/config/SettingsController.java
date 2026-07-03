@@ -1,5 +1,7 @@
 package ai.jarvis.config;
 
+import ai.jarvis.common.model.ApiResponse;
+import ai.jarvis.settings.SettingsResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,10 +25,10 @@ public class SettingsController {
 
     @PatchMapping("/voice")
     @Operation(summary = "Update voice settings", description = "Updates the voice configuration at runtime without restart")
-    @ApiResponse(responseCode = "200", description = "Voice settings updated successfully")
-    @ApiResponse(responseCode = "400", description = "Invalid voice speed provided")
-    @ApiResponse(responseCode = "401", description = "Unauthorized")
-    public ResponseEntity<ai.jarvis.config.ApiResponse<SettingsResponse>> updateVoiceSettings(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Voice settings updated successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid voice speed provided")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized")
+    public ResponseEntity<ApiResponse<SettingsResponse>> updateVoiceSettings(
             @Valid @RequestBody VoiceSettingsRequest request) {
         
         runtimeSettingsService.updateVoiceSettings(request.voiceName(), request.voiceSpeed());
@@ -36,6 +38,6 @@ public class SettingsController {
                 runtimeSettingsService.getVoiceSpeed()
         );
         
-        return ResponseEntity.ok(new ai.jarvis.config.ApiResponse<>(response));
+        return ResponseEntity.ok(new ApiResponse<>(response));
     }
 }
