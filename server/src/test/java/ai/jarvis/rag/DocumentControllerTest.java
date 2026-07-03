@@ -5,10 +5,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.UUID;
 
-import ai.jarvis.config.SecurityConfig;
 import ai.jarvis.config.TestSecurityConfig;
-import ai.jarvis.config.WithMockJarvisUser;
-import ai.jarvis.security.jwt.JwtAuthenticationFilter;
 import ai.jarvis.security.jwt.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
