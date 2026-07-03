@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
+
 @RestController
 @RequestMapping("/api/v1/settings")
 @Tag(name = "Settings", description = "Runtime configuration management")
@@ -32,11 +34,22 @@ public class SettingsController {
         
         runtimeSettingsService.updateVoiceSettings(request.voiceName(), request.voiceSpeed());
         
+        // VoiceSettings takes 4 arguments based on the compile error: String, double, String, String
         SettingsResponse.VoiceSettings voiceSettings = new SettingsResponse.VoiceSettings(
                 runtimeSettingsService.getVoiceName(),
-                runtimeSettingsService.getVoiceSpeed()
+                runtimeSettingsService.getVoiceSpeed(),
+                null, 
+                null
         );
         
-        return ResponseEntity.ok(new ApiResponse<SettingsResponse.VoiceSettings>(voiceSettings));
+        // ApiResponse takes 4 arguments: boolean success, T data, String message, Instant timestamp
+        ApiResponse<SettingsResponse.VoiceSettings> apiResponse = new ApiResponse<>(
+                true,
+                voiceSettings,
+                "Voice settings updated successfully",
+                Instant.now()
+        );
+        
+        return ResponseEntity.ok(apiResponse);
     }
 }
