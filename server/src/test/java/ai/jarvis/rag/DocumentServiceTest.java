@@ -1,5 +1,6 @@
 package ai.jarvis.rag;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,16 +35,26 @@ class DocumentServiceTest {
         UUID userId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
 
-        when(documentRepository.findByIdAndUserId(documentId, userId)).thenReturn(Mono.empty());
+        when(documentRepository
+                .findByIdAndUserId(documentId, userId))
+                .thenReturn(Mono.empty());
 
-        StepVerifier.create(documentService.getDocumentByIdAndUserId(documentId, userId))
-                .expectErrorSatisfies(ex -> Assertions.assertThat(ex)
-                        .isInstanceOf(ResponseStatusException.class)
-                        .extracting(e -> ((ResponseStatusException) e).getStatusCode())
-                        .isEqualTo(HttpStatus.NOT_FOUND))
+        StepVerifier
+                .create(documentService
+                        .getDocumentByIdAndUserId(
+                                documentId, userId))
+                .expectErrorSatisfies(ex ->
+                        Assertions.assertThat(ex)
+                                .isInstanceOf(
+                                        ResponseStatusException.class)
+                                .extracting(e ->
+                                        ((ResponseStatusException) e)
+                                                .getStatusCode())
+                                .isEqualTo(HttpStatus.NOT_FOUND))
                 .verify();
 
-        verify(documentRepository).findByIdAndUserId(documentId, userId);
+        verify(documentRepository)
+                .findByIdAndUserId(documentId, userId);
     }
 
     @Test
@@ -60,14 +71,23 @@ class DocumentServiceTest {
                 "This is a test document"
         );
 
-        when(documentRepository.findByIdAndUserId(documentId, userId)).thenReturn(Mono.just(document));
+        when(documentRepository
+                .findByIdAndUserId(documentId, userId))
+                .thenReturn(Mono.just(document));
 
-        StepVerifier.create(documentService.getDocumentByIdAndUserId(documentId, userId))
+        StepVerifier
+                .create(documentService
+                        .getDocumentByIdAndUserId(
+                                documentId, userId))
                 .expectNextMatches(response ->
-                        response.filename().equals("test.txt")
-                                && response.id().equals(documentId))
+                        response.filename()
+                                .equals("test.txt")
+                                && response.status() ==
+                                DocumentStatus.PENDING
+                                && response.chunkCount() == 0)
                 .verifyComplete();
 
-        verify(documentRepository).findByIdAndUserId(documentId, userId);
+        verify(documentRepository)
+                .findByIdAndUserId(documentId, userId);
     }
 }
