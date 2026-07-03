@@ -53,11 +53,18 @@ class SettingsControllerTest {
         @MockitoBean
         private TextToSpeechService textToSpeechService;
 
+        @MockitoBean
+        private RuntimeSettingsService runtimeSettingsService;
+
         @BeforeEach
         void setUp() {
             setUpJwt(jwtService);
             when(textToSpeechService.getName())
                     .thenReturn("test-tts-engine");
+            when(runtimeSettingsService.getVoiceName())
+                    .thenReturn("Test Voice");
+            when(runtimeSettingsService.getVoiceSpeed())
+                    .thenReturn(1.25);
         }
 
         @Test
@@ -119,11 +126,18 @@ class SettingsControllerTest {
         @MockitoBean
         private TextToSpeechService textToSpeechService;
 
+        @MockitoBean
+        private RuntimeSettingsService runtimeSettingsService;
+
         @BeforeEach
         void setUp() {
             setUpJwt(jwtService);
             when(textToSpeechService.getName())
                     .thenReturn("default-tts-engine");
+            when(runtimeSettingsService.getVoiceName())
+                    .thenReturn("");
+            when(runtimeSettingsService.getVoiceSpeed())
+                    .thenReturn(1.25);
         }
 
         @Test
