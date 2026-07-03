@@ -27,16 +27,16 @@ public class SettingsController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Voice settings updated successfully")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid voice speed provided")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized")
-    public ResponseEntity<ApiResponse<SettingsResponse>> updateVoiceSettings(
+    public ResponseEntity<ApiResponse<SettingsResponse.VoiceSettings>> updateVoiceSettings(
             @Valid @RequestBody VoiceSettingsRequest request) {
         
         runtimeSettingsService.updateVoiceSettings(request.voiceName(), request.voiceSpeed());
         
-        SettingsResponse response = new SettingsResponse(
+        SettingsResponse.VoiceSettings voiceSettings = new SettingsResponse.VoiceSettings(
                 runtimeSettingsService.getVoiceName(),
                 runtimeSettingsService.getVoiceSpeed()
         );
         
-        return ResponseEntity.ok(new ApiResponse<>(response));
+        return ResponseEntity.ok(new ApiResponse<SettingsResponse.VoiceSettings>(voiceSettings));
     }
 }

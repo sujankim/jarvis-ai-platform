@@ -1,27 +1,28 @@
 package ai.jarvis.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 
 @Service
 public class RuntimeSettingsService {
 
-    private final JarvisProperties jarvisProperties;
+    @Value("${jarvis.voice.tts.voice:}")
+    private String initialVoiceName;
+
+    @Value("${jarvis.voice.tts.speed:1.0}")
+    private double initialVoiceSpeed;
+
     private volatile String voiceName;
     private volatile double voiceSpeed;
 
-    public RuntimeSettingsService(JarvisProperties jarvisProperties) {
-        this.jarvisProperties = jarvisProperties;
-    }
-
     @PostConstruct
     public void init() {
-        this.voiceName = jarvisProperties.getVoiceName();
-        double configuredSpeed = jarvisProperties.getVoiceSpeed();
-        if (configuredSpeed < 0.5 || configuredSpeed > 2.0) {
-            throw new IllegalStateException("Configured voice speed out of range: " + configuredSpeed);
+        this.voiceName = initialVoiceName != null ? initialVoiceName : "";
+        if (initialVoiceSpeed < 0.5 || initialVoiceSpeed > 2.0) {
+            throw new IllegalStateException("Configured voice speed out of range: " + initialVoiceSpeed);
         }
-        this.voiceSpeed = configuredSpeed;
+        this.voiceSpeed = initialVoiceSpeed;
     }
 
     public synchronized void updateVoiceSettings(String voiceName, Double voiceSpeed) {
