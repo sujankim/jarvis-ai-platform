@@ -13,9 +13,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 @DisplayName("DocumentService Tests")
 @ExtendWith(MockitoExtension.class)
@@ -28,15 +30,20 @@ class DocumentServiceTest {
     private DocumentService documentService;
 
     @Test
-    @DisplayName("getDocumentByIdAndUserId() should throw excpetion if user was not found")
-    void shouldThrowExceptionIfUserNotFound() {
+    @DisplayName("getDocumentByIdAndUserId() should throw exception if document was not found")
+    void shouldThrowExceptionIfDocumentNotFound() {
         UUID userId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
 
         when(documentRepository.findByIdAndUserId(documentId, userId)).thenReturn(Mono.empty());
 
-        Assertions.assertThatThrownBy(() -> documentService.getDocumentByIdAndUserId(documentId, userId))
-                .isExactlyInstanceOf(ResponseStatusException.class);
+        StepVerifier.create(documentService.getDocumentByIdAndUserId(documentId, userId))
+                .expectErrorSatisfies(ex -> Assertions.assertThat(ex)
+                        .isInstanceOf(ResponseStatusException.class)
+                        .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                        .isEqualTo(HttpStatus.NOT_FOUND))
+                .verify();
+
         verify(documentRepository).findByIdAndUserId(documentId, userId);
     }
 
