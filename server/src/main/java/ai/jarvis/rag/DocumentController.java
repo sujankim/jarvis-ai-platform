@@ -26,7 +26,7 @@ import reactor.core.publisher.Mono;
 @SecurityRequirement(name = "Bearer Auth")
 @Tag(name = "Document", description = "Document Management")
 @RequestMapping("/api/v1/documents")
-class DocumentController {
+public class DocumentController {
     private final DocumentService documentService;
 
     @Operation(summary = "Get document status")
