@@ -144,7 +144,7 @@ public record Agent(
                 null,           // no error
                 totalDurationMs,
                 createdAt, Instant.now(),
-                Instant.now()); // updatedAt = now
+                Instant.now()); // completedAt   = now
     }
 
     /**
