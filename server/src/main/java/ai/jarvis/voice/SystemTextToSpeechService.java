@@ -1,6 +1,6 @@
 package ai.jarvis.voice;
 
-import ai.jarvis.config.RuntimeSettingsService;
+import ai.jarvis.settings.RuntimeSettingsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;

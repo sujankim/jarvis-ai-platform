@@ -1,6 +1,6 @@
 package ai.jarvis.voice;
 
-import ai.jarvis.config.RuntimeSettingsService;
+import ai.jarvis.settings.RuntimeSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
