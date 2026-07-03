@@ -172,11 +172,15 @@ class DocumentControllerTest {
      * AuthenticatedTests — no shared handlers,
      * no Duplicate BeanOverrideHandler.
      *
-     * JwtService is mocked but never configured:
-     * validateToken() returns false by default
-     * (Mockito default for boolean = false)
-     * → JwtAuthenticationFilter rejects request
+     * When no Authorization header is present:
+     * → JwtAuthenticationFilter skips token validation
+     *   entirely (see JwtAuthenticationFilter line 38)
+     * → Request continues unauthenticated
+     * → SecurityConfig's authenticated() rule rejects it
      * → 401 Unauthorized returned ✅
+     *
+     * Note: JwtService.validateToken() is NOT called
+     * in the no-token path.
      */
     @Nested
     @WebFluxTest(controllers = DocumentController.class)
@@ -191,14 +195,18 @@ class DocumentControllerTest {
         // Own context — NOT a duplicate of
         // AuthenticatedTests.jwtService.
         // JwtAuthenticationFilter needs this bean
-        // to start. Default Mockito behaviour:
-        // validateToken() → false → 401
+        // to start. In the no-token scenario,
+        // JwtAuthenticationFilter skips calling
+        // JwtService entirely (no validateToken call).
+        // The 401 comes from SecurityConfig's
+        // authenticated() rule, not from JwtService.
         @MockitoBean
         private JwtService jwtService;
 
         // Own context — needed by DocumentController
-        // even though it's never called (filter
-        // rejects before reaching controller).
+        // even though it's never called (Spring Security
+        // rejects unauthenticated request before
+        // reaching controller).
         @MockitoBean
         private DocumentService documentService;
 
