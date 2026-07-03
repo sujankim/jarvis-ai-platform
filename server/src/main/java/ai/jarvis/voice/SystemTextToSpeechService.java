@@ -7,7 +7,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -125,9 +124,6 @@ public class SystemTextToSpeechService implements TextToSpeechService {
         } finally {
             if (tempFile.exists()) {
                 boolean deleted = tempFile.delete();
-                if (!deleted) {
-                    log.debug("Temp TTS file will be deleted on JVM exit");
-                }
             }
         }
     }
@@ -147,9 +143,6 @@ public class SystemTextToSpeechService implements TextToSpeechService {
 
         } else if (IS_LINUX) {
             playLinuxText(safe, currentVoiceName, currentVoiceSpeed);
-
-        } else {
-            log.warn("No TTS available for OS: {}", OS);
         }
     }
 
@@ -214,7 +207,6 @@ public class SystemTextToSpeechService implements TextToSpeechService {
 
             if (!sayProcess.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 sayProcess.destroyForcibly();
-                log.warn("macOS say timed out");
                 return;
             }
 
@@ -226,16 +218,12 @@ public class SystemTextToSpeechService implements TextToSpeechService {
 
                 if (!convert.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                     convert.destroyForcibly();
-                    log.warn("afconvert timed out");
                 }
             }
 
         } finally {
             if (aiffFile.exists()) {
                 boolean deleted = aiffFile.delete();
-                if (!deleted) {
-                    log.debug("AIFF file will be deleted on JVM exit");
-                }
             }
         }
     }
@@ -291,7 +279,6 @@ public class SystemTextToSpeechService implements TextToSpeechService {
 
             if (!festival.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 festival.destroyForcibly();
-                log.warn("Festival timed out");
             }
         }
     }
@@ -300,7 +287,6 @@ public class SystemTextToSpeechService implements TextToSpeechService {
         Process process = pb.start();
         if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             process.destroyForcibly();
-            log.warn("TTS process timed out");
         }
     }
 
