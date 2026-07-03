@@ -75,27 +75,16 @@ public class SettingsController {
         return getUserId()
                 .map(userId -> {
                     runtimeSettingsService.updateVoiceSettings(request.voiceName(), request.voiceSpeed());
-                    JarvisProperties.VoiceProperties voice = jarvisProperties.voice();
-                    return new SettingsResponse.VoiceSettings(
-                            safeString(runtimeSettingsService.getVoiceName()),
-                            runtimeSettingsService.getVoiceSpeed(),
-                            safeString(textToSpeechService.getName()),
-                            safeString(voice.whisper().model())
-                    );
+                    return buildVoiceSettings();
                 })
                 .map(ApiResponse::ok);
     }
 
     private SettingsResponse buildResponse() {
-        JarvisProperties.VoiceProperties voice = jarvisProperties.voice();
         JarvisProperties.AiProperties ai = jarvisProperties.ai();
 
         return new SettingsResponse(
-                new SettingsResponse.VoiceSettings(
-                        safeString(runtimeSettingsService.getVoiceName()),
-                        runtimeSettingsService.getVoiceSpeed(),
-                        safeString(textToSpeechService.getName()),
-                        safeString(voice.whisper().model())),
+                buildVoiceSettings(),
                 new SettingsResponse.ProviderSettings(
                         safeString(ai.primaryProvider()),
                         environment.getProperty("spring.ai.ollama.chat.model", ""),
@@ -103,6 +92,15 @@ public class SettingsController {
                 new SettingsResponse.SystemInfo(
                         safeString(jarvisProperties.version()),
                         System.getProperty("java.version", "")));
+    }
+
+    private SettingsResponse.VoiceSettings buildVoiceSettings() {
+        JarvisProperties.VoiceProperties voice = jarvisProperties.voice();
+        return new SettingsResponse.VoiceSettings(
+                safeString(runtimeSettingsService.getVoiceName()),
+                runtimeSettingsService.getVoiceSpeed(),
+                safeString(textToSpeechService.getName()),
+                safeString(voice.whisper().model()));
     }
 
     private Mono<UUID> getUserId() {
