@@ -29,6 +29,9 @@ public class RuntimeSettingsService {
             this.voiceName = voiceName;
         }
         if (voiceSpeed != null) {
+            if (voiceSpeed < 0.5 || voiceSpeed > 2.0) {
+                throw new IllegalArgumentException("Voice speed out of range: " + voiceSpeed);
+            }
             this.voiceSpeed = voiceSpeed;
         }
     }

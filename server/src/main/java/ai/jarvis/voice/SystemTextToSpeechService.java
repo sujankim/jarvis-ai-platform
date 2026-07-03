@@ -159,7 +159,8 @@ public class SystemTextToSpeechService implements TextToSpeechService {
                         + "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; ");
 
         if (voiceName != null && !voiceName.isBlank()) {
-            cmd.append("$s.SelectVoice('").append(voiceName).append("'); ");
+            String escapedVoiceName = voiceName.replace("'", "''");
+            cmd.append("$s.SelectVoice('").append(escapedVoiceName).append("'); ");
         }
 
         if (voiceSpeed != 1.0) {
@@ -325,4 +326,3 @@ public class SystemTextToSpeechService implements TextToSpeechService {
                 .trim();
     }
 }
-
