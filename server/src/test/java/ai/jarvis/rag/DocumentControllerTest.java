@@ -1,17 +1,14 @@
 package ai.jarvis.rag;
 
-import static org.mockito.Mockito.when;
-
-import java.time.Instant;
-import java.util.UUID;
-
+import ai.jarvis.config.SecurityConfig;
 import ai.jarvis.config.TestSecurityConfig;
+import ai.jarvis.config.WithMockJarvisUser;
+import ai.jarvis.security.jwt.JwtAuthenticationFilter;
 import ai.jarvis.security.jwt.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
@@ -22,100 +19,202 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
-@WebFluxTest(controllers = {DocumentController.class})
-@ExtendWith(MockitoExtension.class)
-@Import(TestSecurityConfig.class)
+import java.time.Instant;
+import java.util.UUID;
+
+import static org.mockito.Mockito.when;
+
+/**
+ * DocumentController Tests.
+ *
+ * STRUCTURE follows SettingsControllerTest pattern:
+ * No @WebFluxTest on outer class.
+ * Each @Nested class owns its own independent
+ * Spring context — zero shared bean handlers,
+ * zero Duplicate BeanOverrideHandler risk.
+ *
+ * AuthenticatedTests  → TestSecurityConfig (permits all)
+ *                       + @WithMockJarvisUser
+ *                       → tests actual controller logic
+ *
+ * UnauthorizedTests   → Real SecurityConfig + JwtFilter
+ *                       + @MockitoBean JwtService (own context)
+ *                       → tests 401 boundary
+ */
 @DisplayName("DocumentController Tests")
 class DocumentControllerTest {
 
-    public static final String USER_ID_RAW = "3bb93254-6ce0-4cd3-91b3-a292a46e8fe9";
-    public static final UUID USER_ID = UUID.fromString(USER_ID_RAW);
+    // ── Shared constants ──────────────────────────
 
-    private static final String TOKEN = "test-bearer-token";
+    static final String USER_ID_RAW =
+            "3bb93254-6ce0-4cd3-91b3-a292a46e8fe9";
+    static final UUID USER_ID =
+            UUID.fromString(USER_ID_RAW);
+    private static final String TOKEN =
+            "test-bearer-token";
 
-    @Autowired
-    private WebTestClient webTestClient;
+    // ── Authenticated scenarios ───────────────────
 
-    @MockitoBean
-    private DocumentService documentService;
+    /**
+     * Tests that verify controller behaviour for
+     * an authenticated user.
+     *
+     * Uses TestSecurityConfig (permits all requests)
+     * + @WithMockJarvisUser so security is bypassed
+     * and only controller logic is exercised.
+     */
+    @Nested
+    @WebFluxTest(controllers = DocumentController.class)
+    @Import(TestSecurityConfig.class)
+    @WithMockJarvisUser(principal = USER_ID_RAW)
+    @DisplayName("When user is authenticated")
+    class AuthenticatedTests {
 
-    @MockitoBean
-    private JwtService jwtService;
+        @Autowired
+        private WebTestClient webTestClient;
 
-    @BeforeEach
-    void setUp() {
-        when(jwtService.validateToken(TOKEN)).thenReturn(true);
-        when(jwtService.extractTokenType(TOKEN)).thenReturn("access");
-        when(jwtService.extractUserId(TOKEN)).thenReturn(USER_ID_RAW);
-        when(jwtService.extractUsername(TOKEN)).thenReturn("test-user");
-        when(jwtService.extractRole(TOKEN)).thenReturn("USER");
+        @MockitoBean
+        private DocumentService documentService;
+
+        @MockitoBean
+        private JwtService jwtService;
+
+        @Test
+        @DisplayName(
+                "GET /{id}/status returns 200 "
+                        + "with document status")
+        void shouldReturnDocumentStatus() {
+            UUID documentId = UUID.fromString(
+                    "5eff485b-1ca6-4d4f-"
+                            + "b94c-c30c010de82b");
+
+            DocumentStatusResponse statusResponse =
+                    new DocumentStatusResponse(
+                            documentId,
+                            "test-file.pdf",
+                            DocumentStatus.READY,
+                            10,
+                            null,
+                            Instant.now());
+
+            when(documentService
+                    .getDocumentByIdAndUserId(
+                            documentId, USER_ID))
+                    .thenReturn(
+                            Mono.just(statusResponse));
+
+            webTestClient
+                    .get()
+                    .uri("/api/v1/documents"
+                                    + "/{documentId}/status",
+                            documentId)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.data.id")
+                    .isEqualTo(documentId.toString())
+                    .jsonPath("$.data.status")
+                    .isEqualTo("READY");
+        }
+
+        @Test
+        @DisplayName(
+                "GET /{id}/status returns 400 "
+                        + "for invalid document id")
+        void shouldReturnBadRequestForInvalidId() {
+            webTestClient
+                    .get()
+                    .uri("/api/v1/documents"
+                                    + "/{documentId}/status",
+                            "invalid-uuid")
+                    .exchange()
+                    .expectStatus().isBadRequest();
+        }
+
+        @Test
+        @DisplayName(
+                "GET /{id}/status returns 404 "
+                        + "when document not found")
+        void shouldReturnNotFoundWhenMissing() {
+            UUID documentId = UUID.fromString(
+                    "5eff485b-1ca6-4d4f-"
+                            + "b94c-c30c010de82b");
+
+            when(documentService
+                    .getDocumentByIdAndUserId(
+                            documentId, USER_ID))
+                    .thenReturn(Mono.error(
+                            new ResponseStatusException(
+                                    HttpStatus.NOT_FOUND,
+                                    "Document not found")));
+
+            webTestClient
+                    .get()
+                    .uri("/api/v1/documents"
+                                    + "/{documentId}/status",
+                            documentId)
+                    .exchange()
+                    .expectStatus().isNotFound();
+        }
     }
 
-    @Test
-    @DisplayName("Test GET /api/v1/documents/{documentId}/status - Should return document status")
-    void testGetDocumentStatus_ShouldReturnStatus() {
-        UUID documentId = UUID.fromString("5eff485b-1ca6-4d4f-b94c-c30c010de82b");
-        DocumentStatusResponse statusResponse = new DocumentStatusResponse(
-                documentId,
-                "test-file",
-                DocumentStatus.READY,
-                300,
-                null,
-                Instant.now()
-        );
+    // ── Unauthorized scenarios ────────────────────
 
-        when(documentService.getDocumentByIdAndUserId(documentId, USER_ID)).thenReturn(Mono.just(statusResponse));
+    /**
+     * Tests that verify unauthenticated requests
+     * are rejected with 401.
+     *
+     * Uses REAL SecurityConfig + JwtAuthenticationFilter
+     * so the full security chain is active.
+     *
+     * Owns its own @MockitoBean JwtService because
+     * this is an INDEPENDENT Spring context from
+     * AuthenticatedTests — no shared handlers,
+     * no Duplicate BeanOverrideHandler.
+     *
+     * JwtService is mocked but never configured:
+     * validateToken() returns false by default
+     * (Mockito default for boolean = false)
+     * → JwtAuthenticationFilter rejects request
+     * → 401 Unauthorized returned ✅
+     */
+    @Nested
+    @WebFluxTest(controllers = DocumentController.class)
+    @Import({SecurityConfig.class,
+            JwtAuthenticationFilter.class})
+    @DisplayName("When no JWT token provided")
+    class UnauthorizedTests {
 
-        webTestClient
-                .get()
-                .uri("/api/v1/documents/{documentId}/status", documentId)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.data.id").isEqualTo(statusResponse.id().toString())
-                .jsonPath("$.data.status").isEqualTo(statusResponse.status().toString());
-    }
+        @Autowired
+        private WebTestClient webTestClient;
 
-    @Test
-    @DisplayName("Test GET /api/v1/documents/{documentId}/status - Should return bad request when invalid document id provided")
-    void testGetDocumentStatus_ShouldReturnBadRequestWhenInvalidIdProvided() {
-        String invalidDocumentId = "invalid id";
+        // Own context — NOT a duplicate of
+        // AuthenticatedTests.jwtService.
+        // JwtAuthenticationFilter needs this bean
+        // to start. Default Mockito behaviour:
+        // validateToken() → false → 401
+        @MockitoBean
+        private JwtService jwtService;
 
-        webTestClient
-                .get()
-                .uri("/api/v1/documents/{documentId}/status", invalidDocumentId)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN)
-                .exchange()
-                .expectStatus().isBadRequest();
-    }
+        // Own context — needed by DocumentController
+        // even though it's never called (filter
+        // rejects before reaching controller).
+        @MockitoBean
+        private DocumentService documentService;
 
-    @Test
-    @DisplayName("Test GET /api/v1/documents/{documentId}/status - Should return not found when document was not found by id")
-    void testGetDocumentStatus_ShouldReturnNotFoundWhenDocumentNotFound() {
-        UUID documentId = UUID.fromString("5eff485b-1ca6-4d4f-b94c-c30c010de82b");
-
-        when(documentService.getDocumentByIdAndUserId(documentId, USER_ID))
-                .thenReturn(Mono.error(
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "Document not found")));
-        webTestClient
-                .get()
-                .uri("/api/v1/documents/{documentId}/status", documentId)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN)
-                .exchange()
-                .expectStatus().isNotFound();
-    }
-
-    @Test
-    @DisplayName("GET /{id}/status - returns 401 without JWT token")
-    void testGetDocumentStatus_ShouldReturnUnauthorizedWithoutToken() {
-        webTestClient
-                .get()
-                .uri("/api/v1/documents/{documentId}/status",
-                        UUID.randomUUID())
-                .exchange()
-                .expectStatus().isUnauthorized();
+        @Test
+        @DisplayName(
+                "GET /{id}/status returns 401 "
+                        + "without JWT token")
+        void shouldReturnUnauthorizedWithoutToken() {
+            webTestClient
+                    .get()
+                    .uri("/api/v1/documents"
+                                    + "/{documentId}/status",
+                            UUID.randomUUID())
+                    // No Authorization header
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
     }
 }
