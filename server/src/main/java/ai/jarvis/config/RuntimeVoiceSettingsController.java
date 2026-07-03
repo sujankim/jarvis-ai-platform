@@ -16,11 +16,11 @@ import java.time.Instant;
 @RestController
 @RequestMapping("/api/v1/settings")
 @Tag(name = "Settings", description = "Runtime configuration management")
-public class SettingsController {
+public class RuntimeVoiceSettingsController {
 
     private final RuntimeSettingsService runtimeSettingsService;
 
-    public SettingsController(RuntimeSettingsService runtimeSettingsService) {
+    public RuntimeVoiceSettingsController(RuntimeSettingsService runtimeSettingsService) {
         this.runtimeSettingsService = runtimeSettingsService;
     }
 
@@ -34,7 +34,6 @@ public class SettingsController {
         
         runtimeSettingsService.updateVoiceSettings(request.voiceName(), request.voiceSpeed());
         
-        // VoiceSettings takes 4 arguments based on the compile error: String, double, String, String
         SettingsResponse.VoiceSettings voiceSettings = new SettingsResponse.VoiceSettings(
                 runtimeSettingsService.getVoiceName(),
                 runtimeSettingsService.getVoiceSpeed(),
@@ -42,7 +41,6 @@ public class SettingsController {
                 null
         );
         
-        // ApiResponse takes 4 arguments: boolean success, T data, String message, Instant timestamp
         ApiResponse<SettingsResponse.VoiceSettings> apiResponse = new ApiResponse<>(
                 true,
                 voiceSettings,
