@@ -20,6 +20,7 @@ import reactor.core.publisher.Flux;
 
 @WebFluxTest(controllers = {ChatSessionController.class})
 @Import(TestSecurityConfig.class)
+@DisplayName("ChatSessionController Tests")
 class ChatSessionControllerTest {
 
     public static final String USER_ID_RAW = "3bb93254-6ce0-4cd3-91b3-a292a46e8fe9";
@@ -78,6 +79,24 @@ class ChatSessionControllerTest {
             webTestClient
                     .get()
                     .uri("/api/v1/sessions/" + randomSessionId)
+                    .exchange()
+                    .expectStatus().isEqualTo(HttpStatus.UNAUTHORIZED);
+        }
+
+        @Test
+        @DisplayName("GET /api/v1/sessions/{id}/messages - Should return 401 for invalid UUID")
+        void testGetMessages_ShouldReturnUnauthorizedWhenUuidIsMalformed() {
+            webTestClient.get()
+                    .uri("/api/v1/sessions/" + UUID.randomUUID() + "/messages")
+                    .exchange()
+                    .expectStatus().isEqualTo(HttpStatus.UNAUTHORIZED);
+        }
+
+        @Test
+        @DisplayName("DELETE /api/v1/sessions/{id} - Should return 401 for invalid UUID")
+        void testArchiveSession_ShouldReturnUnauthorizedWhenUuidIsMalformed() {
+            webTestClient.delete()
+                    .uri("/api/v1/sessions/" + UUID.randomUUID())
                     .exchange()
                     .expectStatus().isEqualTo(HttpStatus.UNAUTHORIZED);
         }
