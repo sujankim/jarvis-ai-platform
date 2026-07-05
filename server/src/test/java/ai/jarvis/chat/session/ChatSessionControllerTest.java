@@ -43,7 +43,7 @@ class ChatSessionControllerTest {
 
         @Test
         @DisplayName("Test GET /api/v1/sessions - Should return empty list when no sessions found")
-        void testListSessions_ShouldReturnEmptyListWhenNoMemoriesFound() {
+        void testListSessions_ShouldReturnEmptyListWhenNoSessionsFound() {
             when(sessionService.getUserSessions(userId)).thenReturn(Flux.empty());
 
             webTestClient
