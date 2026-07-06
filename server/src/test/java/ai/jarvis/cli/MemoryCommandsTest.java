@@ -115,8 +115,8 @@ class MemoryCommandsTest {
         }
 
         @Test
-        @DisplayName("listMemories should display memories in sorted order")
-        void testListMemories_Sorting() {
+        @DisplayName("listMemories should emit output matching sequential emission order")
+        void testListMemories_EmissionOrder() {
             when(state.getUserId()).thenReturn(userId);
             Memory m1 = Memory.create(userId, MemoryType.FACT, "First Memory", null);
             Memory m2 = Memory.create(userId, MemoryType.FACT, "Second Memory", null);
@@ -153,6 +153,31 @@ class MemoryCommandsTest {
         }
 
         @Test
+        @DisplayName("addMemory should fail when content is blank")
+        void testAddMemory_BlankContent() {
+            when(lineReader.readLine(anyString()))
+                    .thenReturn("FACT")
+                    .thenReturn("   ");
+
+            String result = memoryCommands.addMemory();
+            assertTrue(result.contains("Memory content cannot be empty"));
+            verify(memoryService, never()).saveManual(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("addMemory should fail when saveManual returns empty representing duplicate")
+        void testAddMemory_Duplicate() {
+            when(state.getUserId()).thenReturn(userId);
+            when(lineReader.readLine(anyString()))
+                    .thenReturn("FACT")
+                    .thenReturn("Duplicate Fact");
+            when(memoryService.saveManual(eq(userId), eq(MemoryType.FACT), eq("Duplicate Fact"))).thenReturn(Mono.empty());
+
+            String result = memoryCommands.addMemory();
+            assertTrue(result.contains("Failed to save memory (it might be a duplicate)"));
+        }
+
+        @Test
         @DisplayName("deleteMemory should successfully delete memory by valid index")
         void testDeleteMemory_Success() {
             when(state.getUserId()).thenReturn(userId);
@@ -177,10 +202,34 @@ class MemoryCommandsTest {
         }
 
         @Test
-        @DisplayName("clearMemories should clear all when user confirms yes")
-        void testClearMemories_ConfirmYes() {
+        @DisplayName("deleteMemory should fail with index 0")
+        void testDeleteMemory_IndexZero() {
             when(state.getUserId()).thenReturn(userId);
-            when(lineReader.readLine(anyString())).thenReturn("yes");
+            Memory memory = Memory.create(userId, MemoryType.FACT, "Keep This", null);
+            when(memoryService.getAll(userId)).thenReturn(Flux.just(memory));
+
+            String result = memoryCommands.deleteMemory(0);
+            assertTrue(result.contains("Invalid memory number"));
+            verify(memoryService, never()).delete(any(), any());
+        }
+
+        @Test
+        @DisplayName("deleteMemory should fail with negative index")
+        void testDeleteMemory_NegativeIndex() {
+            when(state.getUserId()).thenReturn(userId);
+            Memory memory = Memory.create(userId, MemoryType.FACT, "Keep This", null);
+            when(memoryService.getAll(userId)).thenReturn(Flux.just(memory));
+
+            String result = memoryCommands.deleteMemory(-1);
+            assertTrue(result.contains("Invalid memory number"));
+            verify(memoryService, never()).delete(any(), any());
+        }
+
+        @Test
+        @DisplayName("clearMemories should clear all when user confirms uppercase YES")
+        void testClearMemories_ConfirmUppercaseYes() {
+            when(state.getUserId()).thenReturn(userId);
+            when(lineReader.readLine(anyString())).thenReturn("YES");
             when(memoryService.deleteAll(userId)).thenReturn(Mono.empty());
 
             String result = memoryCommands.clearMemories();

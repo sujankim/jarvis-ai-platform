@@ -3,6 +3,7 @@ package ai.jarvis.cli;
 import ai.jarvis.memory.Memory;
 import ai.jarvis.memory.MemoryService;
 import ai.jarvis.memory.MemoryType;
+import lombok.extern.slf4j.Slf4j;
 import org.jline.reader.LineReader;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.shell.core.command.annotation.Command;
@@ -13,8 +14,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Component
 public class MemoryCommands {
+
+    private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
     private final CliStateManager state;
     private final MemoryService memoryService;
@@ -38,8 +42,9 @@ public class MemoryCommands {
         UUID userId = state.getUserId();
         List<Memory> memories;
         try {
-            memories = memoryService.getAll(userId).collectList().block(Duration.ofSeconds(10));
+            memories = memoryService.getAll(userId).collectList().block(TIMEOUT);
         } catch (Exception e) {
+            log.error("Failed to load memories for user: {}", userId, e);
             return "Failed to load memories: " + e.getMessage();
         }
 
@@ -63,6 +68,10 @@ public class MemoryCommands {
         }
 
         String typeInput = lineReader.readLine("Memory Type (FACT, GOAL, PREFERENCE, CONTEXT, EVENT): ");
+        if (typeInput == null) {
+            return "Operation canceled.";
+        }
+
         MemoryType type;
         try {
             type = MemoryType.valueOf(typeInput.trim().toUpperCase());
@@ -76,17 +85,20 @@ public class MemoryCommands {
         }
 
         UUID userId = state.getUserId();
-        Memory saved = memoryService.saveManual(userId, type, content.trim()).block();
-
-        if (saved == null) {
-            return "Failed to save memory (it might be a duplicate).";
+        try {
+            Memory saved = memoryService.saveManual(userId, type, content.trim()).block(TIMEOUT);
+            if (saved == null) {
+                return "Failed to save memory (it might be a duplicate).";
+            }
+            return "Memory added successfully!";
+        } catch (Exception e) {
+            log.error("Failed to add memory for user: {}", userId, e);
+            return "Failed to add memory: " + e.getMessage();
         }
-
-        return "Memory added successfully!";
     }
 
     @Command(name = "memory delete", description = "Delete a memory by its list number")
-    public String deleteMemory(@Option(required = true, description = "The memory index number from the list") int number) {
+    public String deleteMemory(@Option(longName = "number", required = true, description = "The memory index number from the list") int number) {
         if (!state.isLoggedIn()) {
             return "Not logged in. Type: login";
         }
@@ -94,8 +106,9 @@ public class MemoryCommands {
         UUID userId = state.getUserId();
         List<Memory> memories;
         try {
-            memories = memoryService.getAll(userId).collectList().block(Duration.ofSeconds(10));
+            memories = memoryService.getAll(userId).collectList().block(TIMEOUT);
         } catch (Exception e) {
+            log.error("Failed to load memories for deletion, user: {}", userId, e);
             return "Failed to load memories for deletion: " + e.getMessage();
         }
 
@@ -109,9 +122,10 @@ public class MemoryCommands {
 
         Memory targetMemory = memories.get(number - 1);
         try {
-            memoryService.delete(targetMemory.id(), userId).block();
+            memoryService.delete(targetMemory.id(), userId).block(TIMEOUT);
             return "Memory deleted successfully!";
         } catch (Exception e) {
+            log.error("Failed to delete memory {} for user: {}", targetMemory.id(), userId, e);
             return "Failed to delete memory: " + e.getMessage();
         }
     }
@@ -123,15 +137,16 @@ public class MemoryCommands {
         }
 
         String confirmation = lineReader.readLine("Are you sure you want to clear all memories? (yes/no): ");
-        if (!"yes".equalsIgnoreCase(confirmation.trim())) {
+        if (confirmation == null || !"yes".equalsIgnoreCase(confirmation.trim())) {
             return "Clear operation canceled.";
         }
 
         UUID userId = state.getUserId();
         try {
-            memoryService.deleteAll(userId).block();
+            memoryService.deleteAll(userId).block(TIMEOUT);
             return "All memories cleared successfully!";
         } catch (Exception e) {
+            log.error("Failed to clear memories for user: {}", userId, e);
             return "Failed to clear memories: " + e.getMessage();
         }
     }
