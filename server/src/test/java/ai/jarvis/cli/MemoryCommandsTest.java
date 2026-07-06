@@ -115,6 +115,18 @@ class MemoryCommandsTest {
         }
 
         @Test
+        @DisplayName("listMemories should display memories in sorted order")
+        void testListMemories_Sorting() {
+            when(state.getUserId()).thenReturn(userId);
+            Memory m1 = Memory.create(userId, MemoryType.FACT, "First Memory", null);
+            Memory m2 = Memory.create(userId, MemoryType.FACT, "Second Memory", null);
+            when(memoryService.getAll(userId)).thenReturn(Flux.just(m1, m2));
+
+            String result = memoryCommands.listMemories();
+            assertTrue(result.indexOf("First Memory") < result.indexOf("Second Memory"));
+        }
+
+        @Test
         @DisplayName("addMemory should successfully add a memory with valid inputs")
         void testAddMemory_Success() {
             when(state.getUserId()).thenReturn(userId);

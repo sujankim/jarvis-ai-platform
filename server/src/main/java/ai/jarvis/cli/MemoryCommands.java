@@ -9,6 +9,7 @@ import org.springframework.shell.core.command.annotation.Command;
 import org.springframework.shell.core.command.annotation.Option;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,7 +36,12 @@ public class MemoryCommands {
         }
 
         UUID userId = state.getUserId();
-        List<Memory> memories = memoryService.getAll(userId).collectList().block();
+        List<Memory> memories;
+        try {
+            memories = memoryService.getAll(userId).collectList().block(Duration.ofSeconds(10));
+        } catch (Exception e) {
+            return "Failed to load memories: " + e.getMessage();
+        }
 
         if (memories == null || memories.isEmpty()) {
             return "No memories found.";
@@ -86,7 +92,12 @@ public class MemoryCommands {
         }
 
         UUID userId = state.getUserId();
-        List<Memory> memories = memoryService.getAll(userId).collectList().block();
+        List<Memory> memories;
+        try {
+            memories = memoryService.getAll(userId).collectList().block(Duration.ofSeconds(10));
+        } catch (Exception e) {
+            return "Failed to load memories for deletion: " + e.getMessage();
+        }
 
         if (memories == null || memories.isEmpty()) {
             return "No memories found to delete.";
