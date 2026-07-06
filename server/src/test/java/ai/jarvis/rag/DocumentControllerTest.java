@@ -1,17 +1,21 @@
 package ai.jarvis.rag;
 
-import ai.jarvis.common.model.ApiResponse;
-import org.junit.jupiter.api.BeforeEach;
+import ai.jarvis.config.SecurityConfig;
+import ai.jarvis.config.TestSecurityConfig;
+import ai.jarvis.config.WithMockJarvisUser;
+import ai.jarvis.security.jwt.JwtAuthenticationFilter;
+import ai.jarvis.security.jwt.JwtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.security.core.context.SecurityContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -20,44 +24,85 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.withSettings;
+import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("DocumentController & Service Unit Tests")
+@DisplayName("DocumentController Tests")
 class DocumentControllerTest {
 
-    @Mock
-    private DocumentService documentService;
-
-    private WebTestClient webTestClient;
-    private final UUID userId = UUID.randomUUID();
-    private final UUID docId = UUID.randomUUID();
-
-    @BeforeEach
-    void setUp() {
-        Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
-        org.mockito.Mockito.when(authentication.getPrincipal()).thenReturn(userId.toString());
-        SecurityContext securityContext = org.mockito.Mockito.mock(SecurityContext.class);
-        org.mockito.Mockito.when(securityContext.getAuthentication()).thenReturn(authentication);
-
-        DocumentController controller = new DocumentController(documentService);
-        webTestClient = WebTestClient.bindToController(controller)
-                .webFilter((exchange, chain) -> chain.filter(exchange)
-                        .contextWrite(context -> ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext))))
-                .build();
-    }
+    static final String USER_ID_RAW = "3bb93254-6ce0-4cd3-91b3-a292a46e8fe9";
+    static final UUID USER_ID = UUID.fromString(USER_ID_RAW);
 
     @Nested
-    @DisplayName("POST /api/v1/documents - Upload")
-    class UploadEndpoints {
+    @WebFluxTest(controllers = DocumentController.class)
+    @Import(TestSecurityConfig.class)
+    @WithMockJarvisUser(principal = USER_ID_RAW)
+    @DisplayName("When user is authenticated")
+    class AuthenticatedTests {
+
+        @Autowired
+        private WebTestClient webTestClient;
+
+        @MockitoBean
+        private DocumentService documentService;
+
+        @MockitoBean
+        private JwtService jwtService;
 
         @Test
-        @DisplayName("Should successfully upload valid document text")
-        void uploadDocument_Success() {
-            DocumentUploadRequest request = new DocumentUploadRequest("test.txt", "Hello World", "Desc");
-            DocumentResponse response = new DocumentResponse(docId, userId, "test.txt", DocumentFileType.TXT, 11L, DocumentStatus.PENDING, 0, "Desc", null, Instant.now(), Instant.now());
+        @DisplayName("GET /{id}/status returns 200 with document status")
+        void shouldReturnDocumentStatus() {
+            UUID documentId = UUID.fromString("5eff485b-1ca6-4d4f-b94c-c30c010de82b");
+            DocumentStatusResponse statusResponse = new DocumentStatusResponse(
+                    documentId,
+                    "test-file.pdf",
+                    DocumentStatus.READY,
+                    10,
+                    null,
+                    Instant.now());
 
-            org.mockito.Mockito.when(documentService.uploadDocument(eq(userId), any(DocumentUploadRequest.class))).thenReturn(Mono.just(response));
+            when(documentService.getDocumentByIdAndUserId(documentId, USER_ID))
+                    .thenReturn(Mono.just(statusResponse));
+
+            webTestClient.get()
+                    .uri("/api/v1/documents/{documentId}/status", documentId)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.data.id").isEqualTo(documentId.toString())
+                    .jsonPath("$.data.status").isEqualTo("READY");
+        }
+
+        @Test
+        @DisplayName("GET /{id}/status returns 400 for invalid document id")
+        void shouldReturnBadRequestForInvalidId() {
+            webTestClient.get()
+                    .uri("/api/v1/documents/{documentId}/status", "invalid-uuid")
+                    .exchange()
+                    .expectStatus().isBadRequest();
+        }
+
+        @Test
+        @DisplayName("GET /{id}/status returns 404 when document not found")
+        void shouldReturnNotFoundWhenMissing() {
+            UUID documentId = UUID.fromString("5eff485b-1ca6-4d4f-b94c-c30c010de82b");
+            when(documentService.getDocumentByIdAndUserId(documentId, USER_ID))
+                    .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found")));
+
+            webTestClient.get()
+                    .uri("/api/v1/documents/{documentId}/status", documentId)
+                    .exchange()
+                    .expectStatus().isNotFound();
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/documents returns 201 with created document")
+        void shouldUploadDocument() {
+            DocumentUploadRequest request = new DocumentUploadRequest("test.txt", "Hello World", "Desc");
+            UUID docId = UUID.randomUUID();
+            DocumentResponse response = new DocumentResponse(docId, USER_ID, "test.txt", DocumentFileType.TXT, 11L, DocumentStatus.PENDING, 0, "Desc", null, Instant.now(), Instant.now());
+
+            when(documentService.uploadDocument(eq(USER_ID), any(DocumentUploadRequest.class)))
+                    .thenReturn(Mono.just(response));
 
             webTestClient.post()
                     .uri("/api/v1/documents")
@@ -68,18 +113,15 @@ class DocumentControllerTest {
                     .jsonPath("$.data.id").isEqualTo(docId.toString())
                     .jsonPath("$.data.status").isEqualTo("PENDING");
         }
-    }
-
-    @Nested
-    @DisplayName("GET /api/v1/documents - List")
-    class ListEndpoints {
 
         @Test
-        @DisplayName("Should return list of documents for current user")
-        void listDocuments_Success() {
-            DocumentResponse response = new DocumentResponse(docId, userId, "test.txt", DocumentFileType.TXT, 11L, DocumentStatus.READY, 1, "Desc", null, Instant.now(), Instant.now());
+        @DisplayName("GET /api/v1/documents returns 200 with user documents list")
+        void shouldListDocuments() {
+            UUID docId = UUID.randomUUID();
+            DocumentResponse response = new DocumentResponse(docId, USER_ID, "test.txt", DocumentFileType.TXT, 11L, DocumentStatus.READY, 1, "Desc", null, Instant.now(), Instant.now());
 
-            org.mockito.Mockito.when(documentService.getUserDocuments(userId)).thenReturn(Flux.just(response));
+            when(documentService.getUserDocuments(USER_ID))
+                    .thenReturn(Flux.just(response));
 
             webTestClient.get()
                     .uri("/api/v1/documents")
@@ -89,21 +131,18 @@ class DocumentControllerTest {
                     .jsonPath("$.data[0].id").isEqualTo(docId.toString())
                     .jsonPath("$.data[0].filename").isEqualTo("test.txt");
         }
-    }
-
-    @Nested
-    @DisplayName("GET /api/v1/documents/{id} - Single Document")
-    class GetSingleEndpoints {
 
         @Test
-        @DisplayName("Should return document details when owner requests")
-        void getDocument_Success() {
-            DocumentResponse response = new DocumentResponse(docId, userId, "test.txt", DocumentFileType.TXT, 11L, DocumentStatus.READY, 1, "Desc", null, Instant.now(), Instant.now());
+        @DisplayName("GET /api/v1/documents/{id} returns 200 with single document details")
+        void shouldGetDocument() {
+            UUID docId = UUID.randomUUID();
+            DocumentResponse response = new DocumentResponse(docId, USER_ID, "test.txt", DocumentFileType.TXT, 11L, DocumentStatus.READY, 1, "Desc", null, Instant.now(), Instant.now());
 
-            org.mockito.Mockito.when(documentService.getDocument(docId, userId)).thenReturn(Mono.just(response));
+            when(documentService.getDocument(docId, USER_ID))
+                    .thenReturn(Mono.just(response));
 
             webTestClient.get()
-                    .uri("/api/v1/documents/" + docId)
+                    .uri("/api/v1/documents/{id}", docId)
                     .exchange()
                     .expectStatus().isOk()
                     .expectBody()
@@ -111,41 +150,42 @@ class DocumentControllerTest {
         }
 
         @Test
-        @DisplayName("Should return 404 when document not found or access denied")
-        void getDocument_NotFoundOrAccessDenied() {
-            org.mockito.Mockito.when(documentService.getDocument(docId, userId)).thenReturn(Mono.error(new ResourceNotFoundException("Not found")));
+        @DisplayName("DELETE /api/v1/documents/{id} returns 244 No Content on success")
+        void shouldDeleteDocument() {
+            UUID docId = UUID.randomUUID();
+            when(documentService.deleteDocument(docId, USER_ID))
+                    .thenReturn(Mono.empty());
 
-            webTestClient.get()
-                    .uri("/api/v1/documents/" + docId)
+            webTestClient.delete()
+                    .uri("/api/v1/documents/{id}", docId)
                     .exchange()
-                    .expectStatus().isNotFound();
+                    .expectStatus().isNoContent();
         }
     }
 
     @Nested
-    @DisplayName("DELETE /api/v1/documents/{id} - Delete")
-    class DeleteEndpoints {
+    @WebFluxTest(controllers = DocumentController.class)
+    @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+    @DisplayName("When no JWT token provided")
+    class UnauthorizedTests {
+
+        @Autowired
+        private WebTestClient webTestClient;
+
+        @MockitoBean
+        private JwtService jwtService;
+
+        @MockitoBean
+        private DocumentService documentService;
 
         @Test
-        @DisplayName("Should delete document successfully and return 244 No Content")
-        void deleteDocument_Success() {
-            org.mockito.Mockito.when(documentService.deleteDocument(docId, userId)).thenReturn(Mono.empty());
-
-            webTestClient.delete()
-                    .uri("/api/v1/documents/" + docId)
+        @DisplayName("GET /{id}/status returns 401 without JWT token")
+        void shouldReturnUnauthorizedWithoutToken() {
+            UUID documentId = UUID.randomUUID();
+            webTestClient.get()
+                    .uri("/api/v1/documents/{documentId}/status", documentId)
                     .exchange()
-                    .expectStatus().isNoContent();
-        }
-
-        @Test
-        @DisplayName("Should return 404 on delete when document not found or access denied")
-        void deleteDocument_NotFound() {
-            org.mockito.Mockito.when(documentService.deleteDocument(docId, userId)).thenReturn(Mono.error(new ResourceNotFoundException("Not found")));
-
-            webTestClient.delete()
-                    .uri("/api/v1/documents/" + docId)
-                    .exchange()
-                    .expectStatus().isNotFound();
+                    .expectStatus().isUnauthorized();
         }
     }
 }

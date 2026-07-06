@@ -1,25 +1,27 @@
 package ai.jarvis.voice;
 
+import ai.jarvis.settings.RuntimeSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @DisplayName("SystemTextToSpeechService Tests")
 class SystemTextToSpeechServiceTest {
 
     private SystemTextToSpeechService service;
+    private RuntimeSettingsService mockSettings;
 
     @BeforeEach
     void setUp() {
-        // FIX: Constructor now requires 2 params
-        // since voice selection was added.
-        // voiceName="" = system default voice
-        // voiceSpeed=1.0 = normal speed
-        service = new SystemTextToSpeechService(
-                "", 1.0);
+        mockSettings = mock(RuntimeSettingsService.class);
+        when(mockSettings.getVoiceName()).thenReturn("");
+        when(mockSettings.getVoiceSpeed()).thenReturn(1.0);
+        service = new SystemTextToSpeechService(mockSettings);
     }
 
     @Test
@@ -27,8 +29,7 @@ class SystemTextToSpeechServiceTest {
     void shouldReturnEmptyForNullText() {
         StepVerifier
                 .create(service.speak(null))
-                .expectNextMatches(
-                        bytes -> bytes.length == 0)
+                .expectNextMatches(bytes -> bytes.length == 0)
                 .verifyComplete();
     }
 
@@ -37,8 +38,7 @@ class SystemTextToSpeechServiceTest {
     void shouldReturnEmptyForBlankText() {
         StepVerifier
                 .create(service.speak("   "))
-                .expectNextMatches(
-                        bytes -> bytes.length == 0)
+                .expectNextMatches(bytes -> bytes.length == 0)
                 .verifyComplete();
     }
 
@@ -61,8 +61,6 @@ class SystemTextToSpeechServiceTest {
     @Test
     @DisplayName("isAvailable() returns boolean without error")
     void shouldReturnAvailabilityWithoutError() {
-        // FIX: boolean primitive is never null
-        // Just verify a value is emitted
         StepVerifier
                 .create(service.isAvailable())
                 .expectNextCount(1)
@@ -83,18 +81,14 @@ class SystemTextToSpeechServiceTest {
     @DisplayName("getName() detects correct OS")
     void shouldDetectCorrectOs() {
         String name = service.getName();
-        String os = System.getProperty("os.name")
-                .toLowerCase();
+        String os = System.getProperty("os.name").toLowerCase();
 
         if (os.contains("win")) {
-            assertThat(name)
-                    .isEqualTo("system-windows");
+            assertThat(name).isEqualTo("system-windows");
         } else if (os.contains("mac")) {
-            assertThat(name)
-                    .isEqualTo("system-macos");
+            assertThat(name).isEqualTo("system-macos");
         } else {
-            assertThat(name)
-                    .isEqualTo("system-linux");
+            assertThat(name).isEqualTo("system-linux");
         }
     }
 
@@ -107,15 +101,14 @@ class SystemTextToSpeechServiceTest {
                 .verifyComplete();
     }
 
-    // ── Voice selection tests ─────────────────────
-
     @Test
     @DisplayName("constructor accepts custom voice name")
     void shouldAcceptCustomVoiceName() {
-        SystemTextToSpeechService customService =
-                new SystemTextToSpeechService(
-                        "Microsoft Zira Desktop",
-                        1.0);
+        RuntimeSettingsService customSettings = mock(RuntimeSettingsService.class);
+        when(customSettings.getVoiceName()).thenReturn("Microsoft Zira Desktop");
+        when(customSettings.getVoiceSpeed()).thenReturn(1.0);
+        
+        SystemTextToSpeechService customService = new SystemTextToSpeechService(customSettings);
 
         assertThat(customService.getName())
                 .isNotBlank()
@@ -125,9 +118,11 @@ class SystemTextToSpeechServiceTest {
     @Test
     @DisplayName("constructor accepts custom speed")
     void shouldAcceptCustomSpeed() {
-        SystemTextToSpeechService fastService =
-                new SystemTextToSpeechService(
-                        "", 1.5);
+        RuntimeSettingsService fastSettings = mock(RuntimeSettingsService.class);
+        when(fastSettings.getVoiceName()).thenReturn("");
+        when(fastSettings.getVoiceSpeed()).thenReturn(1.5);
+        
+        SystemTextToSpeechService fastService = new SystemTextToSpeechService(fastSettings);
 
         assertThat(fastService.getName())
                 .isNotBlank();
@@ -136,11 +131,12 @@ class SystemTextToSpeechServiceTest {
     @Test
     @DisplayName("constructor handles empty voice name")
     void shouldHandleEmptyVoiceName() {
-        SystemTextToSpeechService defaultService =
-                new SystemTextToSpeechService(
-                        "", 1.0);
+        RuntimeSettingsService defaultSettings = mock(RuntimeSettingsService.class);
+        when(defaultSettings.getVoiceName()).thenReturn("");
+        when(defaultSettings.getVoiceSpeed()).thenReturn(1.0);
+        
+        SystemTextToSpeechService defaultService = new SystemTextToSpeechService(defaultSettings);
 
-        // Should use system default voice
         assertThat(defaultService.getName())
                 .startsWith("system-");
     }
