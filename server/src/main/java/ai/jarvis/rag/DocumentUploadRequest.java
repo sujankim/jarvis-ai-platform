@@ -1,7 +1,9 @@
 package ai.jarvis.rag;
 
+import jakarta.validation.constraints.NotBlank;
+
 public record DocumentUploadRequest(
-        String filename,
-        String content,
+        @NotBlank String filename,
+        @NotBlank String content,
         String description
 ) {}

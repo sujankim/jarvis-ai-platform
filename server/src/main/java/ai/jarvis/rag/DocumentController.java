@@ -3,8 +3,10 @@ package ai.jarvis.rag;
 import ai.jarvis.common.model.ApiResponse;
 import ai.jarvis.common.util.SecurityUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -35,8 +37,8 @@ public class DocumentController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Upload document text")
     public Mono<ApiResponse<DocumentResponse>> uploadDocument(
-            @RequestBody DocumentUploadRequest request,
-            Mono<Authentication> authenticationMono) {
+            @Valid @RequestBody DocumentUploadRequest request,
+            @Parameter(hidden = true) Mono<Authentication> authenticationMono) {
         return SecurityUtil.getUserId(authenticationMono)
                 .flatMap(userId -> documentService.uploadDocument(userId, request))
                 .map(ApiResponse::ok);
@@ -45,7 +47,7 @@ public class DocumentController {
     @GetMapping
     @Operation(summary = "List all documents")
     public Mono<ApiResponse<List<DocumentResponse>>> listDocuments(
-            Mono<Authentication> authenticationMono) {
+            @Parameter(hidden = true) Mono<Authentication> authenticationMono) {
         return SecurityUtil.getUserId(authenticationMono)
                 .flatMap(userId -> documentService.getUserDocuments(userId).collectList())
                 .map(ApiResponse::ok);
@@ -55,7 +57,7 @@ public class DocumentController {
     @Operation(summary = "Get document details")
     public Mono<ApiResponse<DocumentResponse>> getDocument(
             @PathVariable UUID id,
-            Mono<Authentication> authenticationMono) {
+            @Parameter(hidden = true) Mono<Authentication> authenticationMono) {
         return SecurityUtil.getUserId(authenticationMono)
                 .flatMap(userId -> documentService.getDocument(id, userId))
                 .map(ApiResponse::ok);
@@ -66,7 +68,7 @@ public class DocumentController {
     @Operation(summary = "Delete a document")
     public Mono<Void> deleteDocument(
             @PathVariable UUID id,
-            Mono<Authentication> authenticationMono) {
+            @Parameter(hidden = true) Mono<Authentication> authenticationMono) {
         return SecurityUtil.getUserId(authenticationMono)
                 .flatMap(userId -> documentService.deleteDocument(id, userId));
     }
@@ -75,7 +77,7 @@ public class DocumentController {
     @Operation(summary = "Get document status")
     public Mono<ApiResponse<DocumentStatusResponse>> getDocumentStatus(
             @PathVariable UUID documentId,
-            Mono<Authentication> authenticationMono) {
+            @Parameter(hidden = true) Mono<Authentication> authenticationMono) {
         return SecurityUtil.getUserId(authenticationMono)
                 .flatMap(userId -> documentService.getDocumentByIdAndUserId(documentId, userId))
                 .map(ApiResponse::ok);

@@ -115,6 +115,18 @@ class DocumentControllerTest {
         }
 
         @Test
+        @DisplayName("POST /api/v1/documents returns 400 when fields are blank")
+        void shouldReturnBadRequestWhenFieldsBlank() {
+            DocumentUploadRequest invalidRequest = new DocumentUploadRequest("", "", "Desc");
+
+            webTestClient.post()
+                    .uri("/api/v1/documents")
+                    .bodyValue(invalidRequest)
+                    .exchange()
+                    .expectStatus().isBadRequest();
+        }
+
+        @Test
         @DisplayName("GET /api/v1/documents returns 200 with user documents list")
         void shouldListDocuments() {
             UUID docId = UUID.randomUUID();
@@ -150,6 +162,19 @@ class DocumentControllerTest {
         }
 
         @Test
+        @DisplayName("GET /api/v1/documents/{id} returns 404 when document belongs to another tenant")
+        void shouldReturnNotFoundForMismatchedOwner() {
+            UUID targetId = UUID.randomUUID();
+            when(documentService.getDocument(targetId, USER_ID))
+                    .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found or access denied")));
+
+            webTestClient.get()
+                    .uri("/api/v1/documents/{id}", targetId)
+                    .exchange()
+                    .expectStatus().isNotFound();
+        }
+
+        @Test
         @DisplayName("DELETE /api/v1/documents/{id} returns 244 No Content on success")
         void shouldDeleteDocument() {
             UUID docId = UUID.randomUUID();
@@ -160,6 +185,19 @@ class DocumentControllerTest {
                     .uri("/api/v1/documents/{id}", docId)
                     .exchange()
                     .expectStatus().isNoContent();
+        }
+
+        @Test
+        @DisplayName("DELETE /api/v1/documents/{id} returns 404 when object ownership mismatch occurs")
+        void shouldReturnNotFoundOnDeleteForMismatchedOwner() {
+            UUID targetId = UUID.randomUUID();
+            when(documentService.deleteDocument(targetId, USER_ID))
+                    .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found or access denied")));
+
+            webTestClient.delete()
+                    .uri("/api/v1/documents/{id}", targetId)
+                    .exchange()
+                    .expectStatus().isNotFound();
         }
     }
 
