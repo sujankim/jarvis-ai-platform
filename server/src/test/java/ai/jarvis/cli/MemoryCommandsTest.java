@@ -226,6 +226,17 @@ class MemoryCommandsTest {
         }
 
         @Test
+        @DisplayName("clearMemories should clear all when user confirms lowercase yes")
+        void testClearMemories_ConfirmLowercaseYes() {
+            when(state.getUserId()).thenReturn(userId);
+            when(lineReader.readLine(anyString())).thenReturn("yes");
+            when(memoryService.deleteAll(userId)).thenReturn(Mono.empty());
+
+            String result = memoryCommands.clearMemories();
+            assertTrue(result.contains("All memories cleared successfully"));
+        }
+
+        @Test
         @DisplayName("clearMemories should clear all when user confirms uppercase YES")
         void testClearMemories_ConfirmUppercaseYes() {
             when(state.getUserId()).thenReturn(userId);
