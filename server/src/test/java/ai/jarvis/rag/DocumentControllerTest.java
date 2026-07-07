@@ -1,7 +1,9 @@
 package ai.jarvis.rag;
 
+import ai.jarvis.config.SecurityConfig;
 import ai.jarvis.config.TestSecurityConfig;
 import ai.jarvis.config.WithMockJarvisUser;
+import ai.jarvis.security.jwt.JwtAuthenticationFilter;
 import ai.jarvis.security.jwt.JwtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -195,6 +197,32 @@ class DocumentControllerTest {
                     .uri("/api/v1/documents/{id}", targetId)
                     .exchange()
                     .expectStatus().isNotFound();
+        }
+    }
+
+    @Nested
+    @WebFluxTest(controllers = DocumentController.class)
+    @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+    @DisplayName("When no JWT token provided")
+    class UnauthorizedTests {
+
+        @Autowired
+        private WebTestClient webTestClient;
+
+        @MockitoBean
+        private JwtService jwtService;
+
+        @MockitoBean
+        private DocumentService documentService;
+
+        @Test
+        @DisplayName("GET /{id}/status returns 401 without JWT token")
+        void shouldReturnUnauthorizedWithoutToken() {
+            UUID documentId = UUID.randomUUID();
+            webTestClient.get()
+                    .uri("/api/v1/documents/{documentId}/status", documentId)
+                    .exchange()
+                    .expectStatus().isUnauthorized();
         }
     }
 }

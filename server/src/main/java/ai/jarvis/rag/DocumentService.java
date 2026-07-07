@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @Slf4j
@@ -32,7 +33,7 @@ public class DocumentService {
     }
 
     public Mono<DocumentResponse> uploadDocument(UUID userId, DocumentUploadRequest request) {
-        long sizeBytes = request.content().getBytes().length;
+        long sizeBytes = request.content().getBytes(StandardCharsets.UTF_8).length;
         Document doc = Document.create(userId, request.filename(), DocumentFileType.TXT, sizeBytes, request.description());
 
         return r2dbcEntityTemplate.insert(doc)
