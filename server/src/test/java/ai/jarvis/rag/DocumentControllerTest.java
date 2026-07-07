@@ -224,5 +224,42 @@ class DocumentControllerTest {
                     .exchange()
                     .expectStatus().isUnauthorized();
         }
+
+        @Test
+        @DisplayName("POST /api/v1/documents returns 401 without JWT token")
+        void shouldReturnUnauthorizedForUpload() {
+            webTestClient.post()
+                    .uri("/api/v1/documents")
+                    .bodyValue(new DocumentUploadRequest("test.txt", "content", null))
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
+
+        @Test
+        @DisplayName("GET /api/v1/documents returns 401 without JWT token")
+        void shouldReturnUnauthorizedForList() {
+            webTestClient.get()
+                    .uri("/api/v1/documents")
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
+
+        @Test
+        @DisplayName("GET /api/v1/documents/{id} returns 401 without JWT token")
+        void shouldReturnUnauthorizedForGet() {
+            webTestClient.get()
+                    .uri("/api/v1/documents/{id}", UUID.randomUUID())
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
+
+        @Test
+        @DisplayName("DELETE /api/v1/documents/{id} returns 401 without JWT token")
+        void shouldReturnUnauthorizedForDelete() {
+            webTestClient.delete()
+                    .uri("/api/v1/documents/{id}", UUID.randomUUID())
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
     }
 }
