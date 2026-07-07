@@ -42,8 +42,8 @@ class AgentApiIntegrationTest {
 
     @Test
     @WithMockJarvisUser(principal = USER_ID_RAW)
-    @DisplayName("POST /api/v1/agents creates a new agent with pending status")
-    void shouldCreateAgentInDatabase() {
+    @DisplayName("POST /api/v1/agents returns 202 Accepted")
+    void shouldReturnAcceptedOnCreateAgent() {
         AgentRequest request = new AgentRequest("Persist Goal", UUID.randomUUID());
 
         when(orchestrator.startAgent(any(String.class), any(UUID.class), any(UUID.class)))

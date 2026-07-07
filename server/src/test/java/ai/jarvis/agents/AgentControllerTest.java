@@ -57,7 +57,9 @@ class AgentControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isAccepted();
+                .expectStatus().isAccepted()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true);
     }
 
     @Test
@@ -70,7 +72,9 @@ class AgentControllerTest {
         webTestClient.get()
                 .uri("/api/v1/agents")
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data").isEmpty();
     }
 
     @Test
@@ -87,7 +91,9 @@ class AgentControllerTest {
         webTestClient.get()
                 .uri("/api/v1/agents/{id}", agentId)
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data").exists();
     }
 
     @Test
