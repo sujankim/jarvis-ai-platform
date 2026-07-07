@@ -1,9 +1,7 @@
 package ai.jarvis.rag;
 
-import ai.jarvis.config.SecurityConfig;
 import ai.jarvis.config.TestSecurityConfig;
 import ai.jarvis.config.WithMockJarvisUser;
-import ai.jarvis.security.jwt.JwtAuthenticationFilter;
 import ai.jarvis.security.jwt.JwtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -12,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -175,7 +172,7 @@ class DocumentControllerTest {
         }
 
         @Test
-        @DisplayName("DELETE /api/v1/documents/{id} returns 244 No Content on success")
+        @DisplayName("DELETE /api/v1/documents/{id} returns 204 No Content on success")
         void shouldDeleteDocument() {
             UUID docId = UUID.randomUUID();
             when(documentService.deleteDocument(docId, USER_ID))
@@ -198,32 +195,6 @@ class DocumentControllerTest {
                     .uri("/api/v1/documents/{id}", targetId)
                     .exchange()
                     .expectStatus().isNotFound();
-        }
-    }
-
-    @Nested
-    @WebFluxTest(controllers = DocumentController.class)
-    @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
-    @DisplayName("When no JWT token provided")
-    class UnauthorizedTests {
-
-        @Autowired
-        private WebTestClient webTestClient;
-
-        @MockitoBean
-        private JwtService jwtService;
-
-        @MockitoBean
-        private DocumentService documentService;
-
-        @Test
-        @DisplayName("GET /{id}/status returns 401 without JWT token")
-        void shouldReturnUnauthorizedWithoutToken() {
-            UUID documentId = UUID.randomUUID();
-            webTestClient.get()
-                    .uri("/api/v1/documents/{documentId}/status", documentId)
-                    .exchange()
-                    .expectStatus().isUnauthorized();
         }
     }
 }

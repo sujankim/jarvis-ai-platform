@@ -1,6 +1,8 @@
 package ai.jarvis.rag;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -10,15 +12,12 @@ import java.util.UUID;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentProcessingService processingService;
-
-    public DocumentService(DocumentRepository documentRepository, DocumentProcessingService processingService) {
-        this.documentRepository = documentRepository;
-        this.processingService = processingService;
-    }
+    private final R2dbcEntityTemplate r2dbcEntityTemplate;
 
     public Mono<DocumentStatusResponse> getDocumentByIdAndUserId(UUID documentId, UUID userId) {
         return documentRepository.findByIdAndUserId(documentId, userId)
@@ -36,7 +35,7 @@ public class DocumentService {
         long sizeBytes = request.content().getBytes().length;
         Document doc = Document.create(userId, request.filename(), DocumentFileType.TXT, sizeBytes, request.description());
 
-        return documentRepository.save(doc)
+        return r2dbcEntityTemplate.insert(doc)
                 .doOnNext(savedDoc -> {
                     processingService.processDocument(savedDoc.id(), userId, request.content(), DocumentFileType.TXT)
                             .subscribe(
