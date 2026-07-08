@@ -35,15 +35,23 @@ class AgentApiIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isAccepted();
+                .expectStatus().isAccepted()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.message").isNotEmpty();
     }
 
     @Test
     @DisplayName("GET /api/v1/agents enforces database cross-tenant tenant isolation")
     void shouldEnforceOwnershipIsolationOnList() {
+        String otherUserId = "00000000-0000-0000-0000-000000000001";
+
         webTestClient.get()
                 .uri("/api/v1/agents")
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data").isArray()
+                .jsonPath("$.data[?(@.userId == '%s')]".formatted(otherUserId)).doesNotExist();
     }
 }
