@@ -3,7 +3,6 @@ package ai.jarvis.integration;
 import ai.jarvis.agents.Agent;
 import ai.jarvis.agents.AgentRepository;
 import ai.jarvis.agents.AgentRequest;
-import ai.jarvis.agents.AgentStatus;
 import ai.jarvis.config.TestContainerConfig;
 import ai.jarvis.config.WithMockJarvisUser;
 import org.junit.jupiter.api.AfterEach;
@@ -60,30 +59,18 @@ class AgentApiIntegrationTest {
                 .jsonPath("$.success").isEqualTo(true);
 
         StepVerifier.create(agentRepository.findAll())
-                .expectNextMatches(agent -> agent.getUserId().equals(USER_ID) && agent.getGoal().equals("Integrate Goal"))
+                .expectNextMatches(agent -> agent.userId().equals(USER_ID) && agent.goal().equals("Integrate Goal"))
                 .verifyComplete();
     }
 
     @Test
     @DisplayName("GET /api/v1/agents enforces database cross-tenant tenant isolation")
     void shouldEnforceOwnershipIsolationOnList() {
-        Agent currentUserAgent = Agent.builder()
-                .id(UUID.randomUUID())
-                .userId(USER_ID)
-                .sessionId(UUID.randomUUID())
-                .goal("Current User Goal")
-                .status(AgentStatus.RUNNING)
-                .build();
+        Agent currentUserAgent = Agent.create(USER_ID, UUID.randomUUID(), "Current User Goal");
         agentRepository.save(currentUserAgent).block();
 
         UUID otherUserId = UUID.randomUUID();
-        Agent otherUserAgent = Agent.builder()
-                .id(UUID.randomUUID())
-                .userId(otherUserId)
-                .sessionId(UUID.randomUUID())
-                .goal("Other User Goal")
-                .status(AgentStatus.RUNNING)
-                .build();
+        Agent otherUserAgent = Agent.create(otherUserId, UUID.randomUUID(), "Other User Goal");
         agentRepository.save(otherUserAgent).block();
 
         webTestClient.get()
