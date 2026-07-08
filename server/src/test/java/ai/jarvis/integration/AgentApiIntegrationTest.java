@@ -1,16 +1,11 @@
 package ai.jarvis.integration;
 
 import ai.jarvis.agents.Agent;
-import ai.jarvis.agents.AgentOrchestrator;
 import ai.jarvis.agents.AgentRepository;
 import ai.jarvis.agents.AgentRequest;
 import ai.jarvis.agents.AgentStatus;
-import ai.jarvis.auth.AuthService;
-import ai.jarvis.auth.LoginRequest;
-import ai.jarvis.auth.LoginResponse;
 import ai.jarvis.config.TestContainerConfig;
-import ai.jarvis.users.User;
-import ai.jarvis.users.UserRepository;
+import ai.jarvis.config.WithMockJarvisUser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +22,7 @@ import java.util.UUID;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @ImportTestcontainers(TestContainerConfig.class)
+@WithMockJarvisUser(principal = AgentApiIntegrationTest.USER_ID_RAW)
 @DisplayName("Agent API Integration Tests")
 class AgentApiIntegrationTest {
 
@@ -36,50 +32,17 @@ class AgentApiIntegrationTest {
     @Autowired
     private AgentRepository agentRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private AuthService authService;
-
-    @Autowired
-    private AgentOrchestrator orchestrator;
-
-    private String jwtToken;
-    private UUID currentUserId;
-    private UUID otherUserId;
+    static final String USER_ID_RAW = "3bb93254-6ce0-4cd3-91b3-a292a46e8fe9";
+    static final UUID USER_ID = UUID.fromString(USER_ID_RAW);
 
     @BeforeEach
     void setUp() {
         agentRepository.deleteAll().block();
-        userRepository.deleteAll().block();
-
-        currentUserId = UUID.randomUUID();
-        User currentUser = User.builder()
-                .id(currentUserId)
-                .email("user@jarvis.ai")
-                .password("encoded_password")
-                .build();
-        userRepository.save(currentUser).block();
-
-        otherUserId = UUID.randomUUID();
-        User otherUser = User.builder()
-                .id(otherUserId)
-                .email("other@jarvis.ai")
-                .password("encoded_password")
-                .build();
-        userRepository.save(otherUser).block();
-
-        LoginResponse loginResponse = authService.login(new LoginRequest("user@jarvis.ai", "password")).block();
-        if (loginResponse != null) {
-            jwtToken = loginResponse.token();
-        }
     }
 
     @AfterEach
     void tearDown() {
         agentRepository.deleteAll().block();
-        userRepository.deleteAll().block();
     }
 
     @Test
@@ -89,7 +52,6 @@ class AgentApiIntegrationTest {
 
         webTestClient.post()
                 .uri("/api/v1/agents")
-                .header("Authorization", "Bearer " + jwtToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
@@ -98,7 +60,7 @@ class AgentApiIntegrationTest {
                 .jsonPath("$.success").isEqualTo(true);
 
         StepVerifier.create(agentRepository.findAll())
-                .expectNextMatches(agent -> agent.getUserId().equals(currentUserId) && agent.getGoal().equals("Integrate Goal"))
+                .expectNextMatches(agent -> agent.getUserId().equals(USER_ID) && agent.getGoal().equals("Integrate Goal"))
                 .verifyComplete();
     }
 
@@ -107,13 +69,14 @@ class AgentApiIntegrationTest {
     void shouldEnforceOwnershipIsolationOnList() {
         Agent currentUserAgent = Agent.builder()
                 .id(UUID.randomUUID())
-                .userId(currentUserId)
+                .userId(USER_ID)
                 .sessionId(UUID.randomUUID())
                 .goal("Current User Goal")
                 .status(AgentStatus.RUNNING)
                 .build();
         agentRepository.save(currentUserAgent).block();
 
+        UUID otherUserId = UUID.randomUUID();
         Agent otherUserAgent = Agent.builder()
                 .id(UUID.randomUUID())
                 .userId(otherUserId)
@@ -125,13 +88,12 @@ class AgentApiIntegrationTest {
 
         webTestClient.get()
                 .uri("/api/v1/agents")
-                .header("Authorization", "Bearer " + jwtToken)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.data").isArray()
                 .jsonPath("$.data.length()").isEqualTo(1)
                 .jsonPath("$.data[0].goal").isEqualTo("Current User Goal")
-                .jsonPath("$.data[0].userId").isEqualTo(currentUserId.toString());
+                .jsonPath("$.data[0].userId").isEqualTo(USER_ID.toString());
     }
 }
