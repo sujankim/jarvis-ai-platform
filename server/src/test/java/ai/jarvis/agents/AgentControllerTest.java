@@ -147,6 +147,7 @@ class AgentControllerTest {
     }
 
     @Nested
+    @WithMockJarvisUser(principal = "invalid-malformed-token-subject")
     @DisplayName("When no JWT token provided")
     class UnauthorizedTests {
 
