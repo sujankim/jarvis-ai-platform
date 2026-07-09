@@ -113,6 +113,12 @@
                 <scope>import</scope>
             </dependency>
 
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -406,6 +412,12 @@
             <version>0.4.8</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -512,6 +524,12 @@
                         <artifactId>flyway-database-postgresql</artifactId>
                         <version>${flyway.version}</version>
                     </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
                 </dependencies>
             </plugin>
 
