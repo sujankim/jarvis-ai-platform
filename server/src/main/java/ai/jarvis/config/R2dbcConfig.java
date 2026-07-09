@@ -37,6 +37,8 @@ public class R2dbcConfig {
                         new UserRoleWriteConverter(),
                         new MessageRoleReadConverter(),
                         new MessageRoleWriteConverter(),
+                        new MemoryTypeReadConverter(),
+                        new MemoryTypeWriteConverter(),
                         new DocumentStatusReadConverter(),
                         new DocumentStatusWriteConverter(),
                         new DocumentFileTypeReadConverter(),
@@ -77,7 +79,7 @@ public class R2dbcConfig {
 
     @ReadingConverter
     public static class MessageRoleReadConverter
-    implements Converter<String, MessageRole> {
+            implements Converter<String, MessageRole> {
         @Override
         public MessageRole convert(String source) {
             return MessageRole.valueOf(source.toUpperCase());
@@ -86,15 +88,14 @@ public class R2dbcConfig {
 
     @WritingConverter
     public static class MessageRoleWriteConverter
-    implements Converter<MessageRole, String> {
+            implements Converter<MessageRole, String> {
         @Override
         public String convert(MessageRole source) {
             return source.name();
         }
     }
 
-    // ── MemoryType converters ──────────────────────────
-
+    // ── MemoryType converters ─────────────────────
     @ReadingConverter
     public static class MemoryTypeReadConverter
             implements Converter<String, MemoryType> {
@@ -114,8 +115,7 @@ public class R2dbcConfig {
         }
     }
 
-    // ── DocumentType converters ──────────────────────────
-
+    // ── DocumentStatus converters ─────────────────
     @ReadingConverter
     public static class DocumentStatusReadConverter
             implements Converter<String, DocumentStatus> {
@@ -135,6 +135,7 @@ public class R2dbcConfig {
         }
     }
 
+    // ── DocumentFileType converters ───────────────
     @ReadingConverter
     public static class DocumentFileTypeReadConverter
             implements Converter<String, DocumentFileType> {
@@ -154,7 +155,8 @@ public class R2dbcConfig {
         }
     }
 
-    // ── AgentStatus ───────────────────────────────
+    // ── AgentStatus converters ────────────────────
+
     @ReadingConverter
     public static class AgentStatusReadConverter
             implements Converter<String, AgentStatus> {
@@ -173,7 +175,7 @@ public class R2dbcConfig {
         }
     }
 
-    // ── AgentStepType ─────────────────────────────
+    // ── AgentStepType converters ──────────────────
     @ReadingConverter
     public static class AgentStepTypeReadConverter
             implements Converter<String, AgentStepType> {
@@ -192,7 +194,7 @@ public class R2dbcConfig {
         }
     }
 
-    // ── AgentStepStatus ───────────────────────────
+    // ── AgentStepStatus converters ────────────────
     @ReadingConverter
     public static class AgentStepStatusReadConverter
             implements Converter<String, AgentStepStatus> {
