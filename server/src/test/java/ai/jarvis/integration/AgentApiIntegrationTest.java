@@ -1,0 +1,135 @@
+package ai.jarvis.integration;
+
+import ai.jarvis.agents.Agent;
+import ai.jarvis.agents.AgentRepository;
+import ai.jarvis.agents.AgentRequest;
+import ai.jarvis.config.TestContainerConfig;
+import ai.jarvis.security.jwt.JwtService;
+import ai.jarvis.user.User;
+import ai.jarvis.user.UserRole;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.testcontainers.context.ImportTestcontainers;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.test.StepVerifier;
+
+import java.time.Duration;
+import java.util.UUID;
+
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@ImportTestcontainers(TestContainerConfig.class)
+@DisplayName("Agent API Integration Tests")
+class AgentApiIntegrationTest {
+
+    @Autowired
+    private WebTestClient webTestClient;
+
+    @Autowired
+    private AgentRepository agentRepository;
+
+    @Autowired
+    private R2dbcEntityTemplate r2dbcEntityTemplate;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    private UUID currentUserId;
+    private String jwtToken;
+
+    @BeforeEach
+    void setUp() {
+        agentRepository.deleteAll().block();
+        r2dbcEntityTemplate.getDatabaseClient().sql("DELETE FROM users").fetch().rowsUpdated().block();
+        
+        currentUserId = UUID.randomUUID();
+        String encodedPassword = passwordEncoder.encode("secret_agent_pass");
+
+        User mockUser = User.create(
+                currentUserId,
+                "testagentuser",
+                "testagentuser@jarvis.local",
+                encodedPassword,
+                "Test User",
+                UserRole.USER
+        );
+        r2dbcEntityTemplate.insert(mockUser).block();
+        jwtToken = jwtService.generateAccessToken(mockUser);
+    }
+
+    @AfterEach
+    void tearDown() {
+        agentRepository.deleteAll().block();
+        r2dbcEntityTemplate.getDatabaseClient().sql("DELETE FROM users").fetch().rowsUpdated().block();
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/agents creates and persists a new agent")
+    void shouldCreateAndPersistAgentInDatabase() {
+        AgentRequest request = new AgentRequest("Integrate Goal", UUID.randomUUID());
+
+        webTestClient.post()
+                .uri("/api/v1/agents")
+                .header("Authorization", "Bearer " + jwtToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isAccepted()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.data.id").exists()
+                .jsonPath("$.data.goal").isEqualTo("Integrate Goal");
+
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> agentRepository.findByUserIdOrderByCreatedAtDesc(currentUserId).collectList().block().size() > 0);
+
+        StepVerifier.create(agentRepository.findByUserIdOrderByCreatedAtDesc(currentUserId))
+                .expectNextMatches(agent -> agent.userId().equals(currentUserId) && agent.goal().equals("Integrate Goal"))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/agents enforces database cross-tenant tenant isolation")
+    void shouldEnforceOwnershipIsolationOnList() {
+        Agent currentUserAgent = Agent.create(currentUserId, UUID.randomUUID(), "Current User Goal");
+        r2dbcEntityTemplate.insert(currentUserAgent).block();
+
+        UUID otherUserId = UUID.randomUUID();
+        String encodedPassword = passwordEncoder.encode("other_pass");
+        User otherUser = User.create(
+                otherUserId,
+                "otheruser",
+                "other@jarvis.ai",
+                encodedPassword,
+                "Other User",
+                UserRole.USER
+        );
+        r2dbcEntityTemplate.insert(otherUser).block();
+
+        Agent otherUserAgent = Agent.create(otherUserId, UUID.randomUUID(), "Other User Goal");
+        r2dbcEntityTemplate.insert(otherUserAgent).block();
+
+        webTestClient.get()
+                .uri("/api/v1/agents")
+                .header("Authorization", "Bearer " + jwtToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data").isArray()
+                .jsonPath("$.data.length()").isEqualTo(1)
+                .jsonPath("$.data[0].goal").isEqualTo("Current User Goal");
+    }
+}
