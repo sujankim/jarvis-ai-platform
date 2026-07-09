@@ -7,6 +7,7 @@ import ai.jarvis.config.TestContainerConfig;
 import ai.jarvis.security.jwt.JwtService;
 import ai.jarvis.user.User;
 import ai.jarvis.user.UserRole;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,7 +19,6 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
@@ -82,7 +82,9 @@ class AgentApiIntegrationTest {
                 .exchange()
                 .expectStatus().isAccepted()
                 .expectBody()
-                .jsonPath("$.success").isEqualTo(true);
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.data.id").exists()
+                .jsonPath("$.data.goal").isEqualTo("Integrate Goal");
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(5))
