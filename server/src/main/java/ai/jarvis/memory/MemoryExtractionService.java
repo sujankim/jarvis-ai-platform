@@ -55,11 +55,9 @@ public class MemoryExtractionService {
             Output: []
             """;
 
-    // Fix 2: timeout constant — configurable and visible
     private static final Duration EXTRACTION_TIMEOUT =
             Duration.ofSeconds(15);
 
-    // Fix 3: hard cap enforced in code, not just in prompt
     private static final int MAX_MEMORIES_PER_MESSAGE = 3;
 
     public Mono<Void> extractAndSave(
@@ -67,8 +65,6 @@ public class MemoryExtractionService {
             UUID sessionId,
             String userMessage) {
 
-        // Fix 1: guard null identifiers FIRST
-        // Prevents wasted Ollama calls and DB errors
         if (userId == null || sessionId == null) {
             log.debug(
                     "Skipping extraction: null "
@@ -76,7 +72,7 @@ public class MemoryExtractionService {
             return Mono.empty();
         }
 
-        // Short messages have nothing to extract
+        // Short messages have nothing to extract.
         if (userMessage == null
                 || userMessage.trim().length() < 10) {
             return Mono.empty();
@@ -85,15 +81,13 @@ public class MemoryExtractionService {
         return Mono.fromCallable(() ->
                         callExtractionModel(userMessage))
                 .subscribeOn(Schedulers.boundedElastic())
-                // Fix 2: timeout prevents thread starvation
-                // if Ollama is slow or unresponsive
                 .timeout(EXTRACTION_TIMEOUT)
                 .flatMap(json ->
                         parseAndSaveAll(
                                 json, userId, sessionId))
                 .onErrorResume(error -> {
-                    // Handles ALL errors including TimeoutException
-                    // Extraction failure NEVER affects chat
+                    // Handles ALL errors including TimeoutException.
+                    // Extraction failure NEVER affects chat.
                     log.debug(
                             "Memory extraction skipped "
                                     + "for user={}: {}",
@@ -157,14 +151,9 @@ public class MemoryExtractionService {
 
         return reactor.core.publisher.Flux
                 .fromIterable(extracted)
-                // Fix 3: hard cap regardless of AI output
-                // Prompt says max 3, but AI is not 100% reliable
-                // .take(3) GUARANTEES max 3 saves
                 .take(MAX_MEMORIES_PER_MESSAGE)
-                // concatMap = sequential saves
-                // Prevents race condition in duplicate check
                 .concatMap(m ->
-                        memoryService.save(
+                        memoryService.saveWithEmbedding(
                                 userId,
                                 m.type(),
                                 m.content(),
