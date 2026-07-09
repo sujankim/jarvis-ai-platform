@@ -6,7 +6,7 @@ import ai.jarvis.agents.AgentRequest;
 import ai.jarvis.config.TestContainerConfig;
 import ai.jarvis.security.jwt.JwtService;
 import ai.jarvis.user.User;
-import ai.jarvis.user.Role;
+import ai.jarvis.user.UserRole;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,8 +46,15 @@ class AgentApiIntegrationTest {
     void setUp() {
         agentRepository.deleteAll().block();
         currentUserId = UUID.randomUUID();
-        
-        User mockUser = new User(currentUserId, "testuser", Role.USER);
+
+        User mockUser = User.create(
+                currentUserId,
+                "testuser",
+                "test@jarvis.ai",
+                "hashed_password",
+                "Test User",
+                UserRole.USER
+        );
         jwtToken = jwtService.generateAccessToken(mockUser);
     }
 
