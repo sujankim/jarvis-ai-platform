@@ -56,9 +56,6 @@
     <properties>
         <java.version>21</java.version>
         <spring-ai.version>2.0.0-M8</spring-ai.version>
-        <!-- RC1: Due June 11, 2026 -->
-        <!-- GA:  Due June 4-11, 2026 -->
-        <!-- Update when released: change version above -->
         <mapstruct.version>1.6.3</mapstruct.version>
         <spring-shell.version>4.0.2</spring-shell.version>
         <lombok.version>1.18.46</lombok.version>
@@ -66,10 +63,8 @@
         <bouncycastle.version>1.84</bouncycastle.version>
         <jjwt.version>0.12.7</jjwt.version>
         <testcontainers.version>2.0.5</testcontainers.version>
-        <!-- Explicit versions for Flyway plugin classpath -->
         <postgresql.version>42.7.11</postgresql.version>
         <flyway.version>11.14.1</flyway.version>
-        <spring-shell.version>4.0.2</spring-shell.version>
     </properties>
 
     <repositories>
@@ -90,12 +85,6 @@
 
     <dependencyManagement>
         <dependencies>
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
-            <scope>test</scope>
-        </dependency>
 
             <dependency>
                 <groupId>org.springframework.ai</groupId>
@@ -113,36 +102,15 @@
                 <scope>import</scope>
             </dependency>
 
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
-            <scope>test</scope>
-        </dependency>
         </dependencies>
     </dependencyManagement>
 
     <dependencies>
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- ========================= -->
-        <!-- Spring Boot Core          -->
-        <!-- ========================= -->
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
-
-       <!-- <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>-->
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -172,37 +140,28 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- Database                  -->
-        <!-- ========================= -->
-
-        <!-- Reactive DB access -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-r2dbc</artifactId>
         </dependency>
 
-        <!-- JDBC required for Flyway + PgVector -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
-        <!-- PostgreSQL R2DBC Driver -->
         <dependency>
-            <groupId>org.postgresql</groupId>
+            <groupId>org.postgresql</>
             <artifactId>r2dbc-postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- PostgreSQL JDBC Driver (Flyway needs this) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Flyway migrations -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
@@ -213,43 +172,31 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Reactive Redis for session caching -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
         </dependency>
 
-        <!-- Netty DNS resolver for macOS -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-resolver-dns-native-macos</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- Spring AI 2.0             -->
-        <!-- ========================= -->
-
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-ollama</artifactId>
         </dependency>
 
-        <!-- Excluded via autoconfigure until API key configured -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-google-genai</artifactId>
         </dependency>
 
-        <!-- Excluded via autoconfigure until Phase 2 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
         </dependency>
-
-        <!-- ========================= -->
-        <!-- JWT                       -->
-        <!-- ========================= -->
 
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -271,20 +218,11 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- Security / Crypto         -->
-        <!-- ========================= -->
-
-        <!-- Argon2id password hashing -->
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
         </dependency>
-
-        <!-- ========================= -->
-        <!-- Spring Shell              -->
-        <!-- ========================= -->
 
         <dependency>
             <groupId>org.springframework.shell</groupId>
@@ -298,19 +236,11 @@
             <version>${spring-shell.version}</version>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- MapStruct                 -->
-        <!-- ========================= -->
-
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
             <version>${mapstruct.version}</version>
         </dependency>
-
-        <!-- ========================= -->
-        <!-- OpenAPI / Swagger UI      -->
-        <!-- ========================= -->
 
         <dependency>
             <groupId>org.springdoc</groupId>
@@ -318,18 +248,10 @@
             <version>${springdoc.version}</version>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- Reactor                   -->
-        <!-- ========================= -->
-
         <dependency>
             <groupId>io.projectreactor.addons</groupId>
             <artifactId>reactor-extra</artifactId>
         </dependency>
-
-        <!-- ========================= -->
-        <!-- Metrics                   -->
-        <!-- ========================= -->
 
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -337,19 +259,11 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- Lombok                    -->
-        <!-- ========================= -->
-
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
-
-        <!-- ========================= -->
-        <!-- Testing                   -->
-        <!-- ========================= -->
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -375,7 +289,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- TC 2.0 uses testcontainers- prefix -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
@@ -394,13 +307,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- ========================= -->
-        <!-- MCP Server (Phase 4)      -->
-        <!-- ========================= -->
-
-        <!-- Spring AI MCP Server -->
-        <!-- Exposes Jarvis tools via Model Context Protocol -->
-        <!-- External clients: Claude Desktop, VS Code AI etc. -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-mcp-server-webflux</artifactId>
@@ -418,12 +324,12 @@
             <version>4.2.0</version>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
     <build>
         <plugins>
 
-            <!-- Spring Boot executable JAR -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -441,7 +347,6 @@
                 </configuration>
             </plugin>
 
-            <!-- Java compiler + annotation processors -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -451,7 +356,6 @@
                         <arg>-parameters</arg>
                     </compilerArgs>
                     <annotationProcessorPaths>
-                        <!-- Lombok MUST be before MapStruct -->
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
@@ -470,21 +374,6 @@
                 </configuration>
             </plugin>
 
-            <!-- ─────────────────────────────────────────
-                 Flyway Maven Plugin
-                 Provides: ./mvnw flyway:info
-                           ./mvnw flyway:migrate
-                           ./mvnw flyway:clean
-                 The plugin runs in its OWN classpath so
-                 we must declare JDBC driver + PostgreSQL
-                 support as plugin <dependencies>.
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
-            <scope>test</scope>
-        </dependency>
-                 ───────────────────────────────────────── -->
             <plugin>
                 <groupId>org.flywaydb</groupId>
                 <artifactId>flyway-maven-plugin</artifactId>
@@ -500,40 +389,19 @@
                     </locations>
                 </configuration>
                 <dependencies>
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
-            <scope>test</scope>
-        </dependency>
-                    <!--
-                        PostgreSQL JDBC driver for the plugin's classpath.
-                        Without this: "Unable to obtain connection" error.
-                    -->
                     <dependency>
                         <groupId>org.postgresql</groupId>
                         <artifactId>postgresql</artifactId>
                         <version>${postgresql.version}</version>
                     </dependency>
-                    <!--
-                        Flyway PostgreSQL support for the plugin's classpath.
-                        Without this: PostgreSQL dialect not found.
-                    -->
                     <dependency>
                         <groupId>org.flywaydb</groupId>
                         <artifactId>flyway-database-postgresql</artifactId>
                         <version>${flyway.version}</version>
                     </dependency>
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
-            <scope>test</scope>
-        </dependency>
                 </dependencies>
             </plugin>
 
-            <!-- Unit tests only (exclude integration tests) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
