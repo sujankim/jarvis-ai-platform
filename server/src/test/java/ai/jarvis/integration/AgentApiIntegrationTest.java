@@ -18,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.test.StepVerifier;
 
@@ -41,6 +42,9 @@ class AgentApiIntegrationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     private UUID currentUserId;
     private String jwtToken;
 
@@ -50,12 +54,13 @@ class AgentApiIntegrationTest {
         r2dbcEntityTemplate.getDatabaseClient().sql("DELETE FROM users").fetch().rowsUpdated().block();
         
         currentUserId = UUID.randomUUID();
+        String encodedPassword = passwordEncoder.encode("secret_agent_pass");
 
         User mockUser = User.create(
                 currentUserId,
-                "testuser",
-                "test@jarvis.ai",
-                "hashed_password",
+                "testagentuser",
+                "testagentuser@jarvis.local",
+                encodedPassword,
                 "Test User",
                 UserRole.USER
         );
@@ -103,11 +108,12 @@ class AgentApiIntegrationTest {
         r2dbcEntityTemplate.insert(currentUserAgent).block();
 
         UUID otherUserId = UUID.randomUUID();
+        String encodedPassword = passwordEncoder.encode("other_pass");
         User otherUser = User.create(
                 otherUserId,
                 "otheruser",
                 "other@jarvis.ai",
-                "hashed_password",
+                encodedPassword,
                 "Other User",
                 UserRole.USER
         );

@@ -90,6 +90,12 @@
 
     <dependencyManagement>
         <dependencies>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
 
             <dependency>
                 <groupId>org.springframework.ai</groupId>
@@ -111,6 +117,12 @@
     </dependencyManagement>
 
     <dependencies>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- ========================= -->
         <!-- Spring Boot Core          -->
@@ -454,6 +466,12 @@
                  The plugin runs in its OWN classpath so
                  we must declare JDBC driver + PostgreSQL
                  support as plugin <dependencies>.
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
                  ───────────────────────────────────────── -->
             <plugin>
                 <groupId>org.flywaydb</groupId>
@@ -470,6 +488,12 @@
                     </locations>
                 </configuration>
                 <dependencies>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
                     <!--
                         PostgreSQL JDBC driver for the plugin's classpath.
                         Without this: "Unable to obtain connection" error.
