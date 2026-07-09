@@ -18,8 +18,10 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
 import java.util.UUID;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
@@ -45,6 +47,8 @@ class AgentApiIntegrationTest {
     @BeforeEach
     void setUp() {
         agentRepository.deleteAll().block();
+        r2dbcEntityTemplate.getDatabaseClient().sql("DELETE FROM users").fetch().rowsUpdated().block();
+        
         currentUserId = UUID.randomUUID();
 
         User mockUser = User.create(
@@ -55,12 +59,14 @@ class AgentApiIntegrationTest {
                 "Test User",
                 UserRole.USER
         );
+        r2dbcEntityTemplate.insert(mockUser).block();
         jwtToken = jwtService.generateAccessToken(mockUser);
     }
 
     @AfterEach
     void tearDown() {
         agentRepository.deleteAll().block();
+        r2dbcEntityTemplate.getDatabaseClient().sql("DELETE FROM users").fetch().rowsUpdated().block();
     }
 
     @Test
@@ -78,6 +84,11 @@ class AgentApiIntegrationTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(true);
 
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> agentRepository.findByUserIdOrderByCreatedAtDesc(currentUserId).collectList().block().size() > 0);
+
         StepVerifier.create(agentRepository.findByUserIdOrderByCreatedAtDesc(currentUserId))
                 .expectNextMatches(agent -> agent.userId().equals(currentUserId) && agent.goal().equals("Integrate Goal"))
                 .verifyComplete();
@@ -90,6 +101,16 @@ class AgentApiIntegrationTest {
         r2dbcEntityTemplate.insert(currentUserAgent).block();
 
         UUID otherUserId = UUID.randomUUID();
+        User otherUser = User.create(
+                otherUserId,
+                "otheruser",
+                "other@jarvis.ai",
+                "hashed_password",
+                "Other User",
+                UserRole.USER
+        );
+        r2dbcEntityTemplate.insert(otherUser).block();
+
         Agent otherUserAgent = Agent.create(otherUserId, UUID.randomUUID(), "Other User Goal");
         r2dbcEntityTemplate.insert(otherUserAgent).block();
 
