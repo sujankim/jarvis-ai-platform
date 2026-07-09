@@ -1,221 +1,337 @@
 # 🗺️ Jarvis AI Platform — Roadmap
 
-> **Last Updated:** June 2026
-> **Current Status:** Phase 5 — In Progress 🔨
+> **Last Updated:** July 2026  
+> **Current Status:** Phase 7 — In Progress 🔨
 
 ---
 
-## 📊 Status Legend
+# 📊 Status Legend
 
-| Symbol | Meaning        |
-| ------ | -------------- |
-| ✅      | Complete       |
-| 🔨     | In Progress    |
-| 📋     | Planned        |
-| 💭     | Considering    |
-| ❌      | Will NOT Build |
-
----
-
-## 🏗️ Phase 0 — Foundation ✅ Complete
-
-Architecture designed, repository structured,
-and documentation written before any code.
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Complete |
+| 🔨 | In Progress |
+| 📋 | Planned |
+| 💭 | Considering |
+| ❌ | Will NOT Build |
 
 ---
 
-## 🔥 Phase 1 — AI Core Foundation ✅ Released (v0.1.0)
+# 🏗️ Phase 0 — Foundation ✅ Complete
+
+Architecture designed, repository structured, and documentation written before any code.
+
+---
+
+# 🔥 Phase 1 — AI Core Foundation ✅ Released (v0.1.0)
 
 **Released:** June 2026
 
-* ✅ Spring Boot 4 + Spring AI 2.0 (M8)
-* ✅ Ollama (local) + Gemini (cloud fallback)
-* ✅ Provider abstraction (`AiProvider` interface)
-* ✅ SSE token streaming (WebFlux)
-* ✅ JWT authentication (Argon2id)
-* ✅ PostgreSQL + Flyway (V1–V8)
-* ✅ Spring Shell 4 CLI (`jarvis:>` prompt)
-* ✅ Custom JLine terminal
-* ✅ Session management + message persistence
-* ✅ Working memory (date/time/user injection)
-* ✅ Redis session caching
-* ✅ First-run setup wizard
-* ✅ Swagger UI + health indicators
-* ✅ GitHub Actions CI
-* ✅ Dependabot + CodeRabbit
+## Core
+
+- ✅ Spring Boot 4 + Spring AI 2.0 (M8)
+- ✅ Ollama (local) + Gemini (cloud fallback)
+- ✅ Provider abstraction (`AiProvider` interface)
+- ✅ SSE token streaming (WebFlux)
+- ✅ JWT authentication (Argon2id)
+- ✅ PostgreSQL + Flyway (V1–V8)
+- ✅ Spring Shell 4 CLI (`jarvis:>` prompt)
+- ✅ Custom JLine terminal
+- ✅ Session management + message persistence
+- ✅ Working memory (date/time/user injection)
+- ✅ Redis session caching
+- ✅ First-run setup wizard
+- ✅ Swagger UI + Health Indicators
+- ✅ GitHub Actions CI
+- ✅ Dependabot + CodeRabbit
 
 ### Contributor Tasks
-* 📋 Token count display after response — #3
-* 📋 Examples command — #4
-* 📋 Docker image + publish workflow — #6
-* 📋 OpenRouter as third provider — #7
-* 📋 Rate limiting implementation — #11
+
+- 📋 Token count display after response — #3
+- 📋 Examples command — #4
+- 📋 Docker image + publish workflow — #6
+- 📋 OpenRouter as third provider — #7 / #68
+- 📋 Rate limiting implementation — #11
 
 ---
 
-## 🧠 Phase 2 — Memory System ✅ Core Complete
+# 🧠 Phase 2 — Memory System ✅ Core Complete
 
-**Target:** `v0.2.0`
+**Released:** `v0.2.0`
 
-### Core ✅ Complete
-* ✅ Redis 7 session caching (~1ms vs ~50ms DB)
-* ✅ pgvector 0.7.4 embeddings
-* ✅ `memories` table (V9) + embedding column (V11)
-* ✅ Unique constraint (V12)
-* ✅ Memory entity + `MemoryType` enum
-* ✅ `MemoryRepository` (R2DBC)
-* ✅ `MemoryEmbeddingRepository` (JDBC/pgvector)
-* ✅ `MemoryService` (CRUD + semantic search)
-* ✅ `EmbeddingService` (`nomic-embed-text`)
-* ✅ `MemoryExtractionService` (async AI extraction)
-* ✅ `PromptAssembler` updated (memory injection)
-* ✅ `AiOrchestrator` (parallel load via `Mono.zip`)
-* ✅ Memory REST API (`GET`, `POST`, `DELETE`) — #35
+## Core
 
-### Contributor Tasks 📋
-* 📋 CLI memory commands — #34
-* 📋 Conversation summarization — #8 / #37
+- ✅ Redis 7 session caching (~1ms vs ~50ms DB)
+- ✅ pgvector 0.7.4 embeddings
+- ✅ `memories` table (V9) + embedding column (V11)
+- ✅ Unique constraint (V12)
+- ✅ Memory entity + `MemoryType`
+- ✅ `MemoryRepository`
+- ✅ `MemoryEmbeddingRepository`
+- ✅ `MemoryService`
+- ✅ `EmbeddingService`
+- ✅ `MemoryExtractionService`
+- ✅ Prompt memory injection
+- ✅ Parallel loading via `Mono.zip`
+- ✅ Memory REST API (#35)
+- ✅ CLI memory commands (#34)
+- ✅ Memory extraction tests (#53)
+- ✅ AiOrchestrator tests (#55)
+- ✅ Semantic search (#47)
 
----
+### Contributor Tasks
 
-## 📚 Phase 3 — RAG Engine ✅ Core Complete
-
-**Target:** `v0.3.0`
-
-### Core ✅ Complete
-* ✅ `documents` table (V13) + composite FK
-* ✅ `document_chunks` + pgvector + HNSW index (V14)
-* ✅ `Document` + `DocumentChunk` entities
-* ✅ `TextExtractor` interface (Strategy Pattern)
-* ✅ `PlainTextExtractor` + `MarkdownExtractor`
-* ✅ `ChunkEmbeddingRepository` (JDBC/pgvector)
-* ✅ `DocumentProcessingService` (chunking)
-* ✅ `DocumentEmbeddingService` (async embedding)
-* ✅ `RagSearchService` (semantic search)
-* ✅ `PromptAssembler` updated (RAG injection step 4)
-* ✅ `AiOrchestrator` (3-way parallel `Mono.zip`)
-
-### Contributor Tasks 📋
-* 📋 Document REST API
-* 📋 CLI document commands
-* 📋 PDF text extraction (PDFBox)
-* 📋 Tests
+- 📋 Conversation summarization — #8 / #37
+- 📋 HNSW index tuning
 
 ---
 
-## 🔧 Phase 4 — Tool Engine ✅ Core Complete
+# 📚 Phase 3 — RAG Engine ✅ Core Complete
 
-**Released:** v0.4.0 core — June 2026
+**Released:** `v0.3.0`
 
-### Core ✅ Complete
-* ✅ `JarvisTool` marker interface (Strategy Pattern)
-* ✅ `ToolRegistry` (auto-discovers all JarvisTool beans)
-* ✅ `DateTimeTool` (current time, timezone queries)
-* ✅ `CalculatorTool` (math expression evaluation)
-* ✅ `WeatherTool` (OpenWeatherMap free tier)
-* ✅ `WebSearchTool` (DuckDuckGo, no API key)
-* ✅ `OllamaProvider` updated (tools support)
-* ✅ `GeminiProvider` updated (tools support)
-* ✅ `McpServerConfig` (expose tools via MCP protocol)
-* ✅ Package structure: `tools/builtin/` + `tools/mcp/`
+## Core
 
-### Contributor Tasks 📋
-* 📋 CLI tool commands (`tools`, `tool-test`)
-* 📋 Tool integration tests
-* 📋 WeatherTool + WebSearchTool mock HTTP tests
-* 📋 OpenRouter as third provider — #7
+- ✅ Documents table (V13)
+- ✅ Document chunks + pgvector + HNSW (V14)
+- ✅ Document entities
+- ✅ Strategy-based text extraction
+- ✅ Plain text & Markdown extractors
+- ✅ ChunkEmbeddingRepository
+- ✅ DocumentProcessingService
+- ✅ DocumentEmbeddingService
+- ✅ RagSearchService
+- ✅ Prompt RAG injection
+- ✅ Parallel loading via `Mono.zip`
+- ✅ Document REST API (#50 / #115)
+- ✅ Document status endpoint (#95)
+
+### Contributor Tasks
+
+- 📋 CLI document commands (#51)
+- 📋 PDF extraction (#52)
 
 ---
 
-## 🎙️ Phase 5 — Voice Assistant ✅ Core Complete
+# 🔧 Phase 4 — Tool Engine ✅ Core Complete
 
-**Released:** v0.5.0 core — June 2026
+**Released:** `v0.4.0`
 
-### Core ✅ Complete
-* ✅ `WhisperTranscriptionService` (Groq API + local whisper.cpp)
-* ✅ `TextToSpeechService` (interface — Strategy Pattern)
-* ✅ `SystemTextToSpeechService` (Windows/macOS/Linux)
-* ✅ Voice selection (male/female per OS)
-* ✅ Speed control (0.5x – 2.0x)
-* ✅ `VoiceConversationService` (full voice loop)
-* ✅ Sentence-buffered TTS (natural speech rhythm)
-* ✅ Independent SSE token stream + background TTS
-* ✅ `VoiceController` (5 REST endpoints)
-* ✅ `VoiceChatEvent` record (SESSION/TOKEN/DONE)
-* ✅ VoiceException hierarchy
+## Core
 
-### Endpoints
+- ✅ Strategy-based `JarvisTool`
+- ✅ ToolRegistry
+- ✅ DateTimeTool
+- ✅ CalculatorTool
+- ✅ WeatherTool
+- ✅ WebSearchTool
+- ✅ Ollama tool calling
+- ✅ Gemini tool calling
+- ✅ MCP Server
+- ✅ Tool integration tests (#67)
+- ✅ Weather/WebSearch tests (#71)
+
+### Contributor Tasks
+
+- 📋 CLI tool commands (#66)
+- 📋 OpenRouter provider (#7 / #68)
+
+---
+
+# 🎙️ Phase 5 — Voice Assistant ✅ Core Complete
+
+**Released:** `v0.5.0`
+
+## Core
+
+- ✅ WhisperTranscriptionService
+- ✅ Local whisper.cpp support
+- ✅ Groq Whisper support
+- ✅ TextToSpeechService
+- ✅ Cross-platform system TTS
+- ✅ Voice selection
+- ✅ Voice speed control
+- ✅ VoiceConversationService
+- ✅ Sentence-buffered speech
+- ✅ Independent SSE + TTS pipelines
+- ✅ VoiceController
+- ✅ VoiceChatEvent
+- ✅ VoiceException hierarchy
+- ✅ Runtime settings API (#93)
+- ✅ Voice settings API (#94)
+- ✅ Voice REST API (#70)
+
+## Endpoints
+
 ```text
-POST /api/v1/voice/transcribe  (audio → text)
-POST /api/v1/voice/speak       (text → play on server)
-POST /api/v1/voice/speak/bytes (text → wav bytes)
-POST /api/v1/voice/chat        (audio → SSE AI response)
-GET  /api/v1/voice/status      (availability check)
+POST /api/v1/voice/transcribe
+POST /api/v1/voice/speak
+POST /api/v1/voice/speak/bytes
+POST /api/v1/voice/chat
+GET  /api/v1/voice/status
+GET  /api/v1/settings
+PATCH /api/v1/settings/voice
 ```
----
 
-## 🤖 Phase 6 — Agents ✅ Core Complete
+### Contributor Tasks
 
-* ✅ ReACT pattern (`Reason → Act → Observe`)
-* ✅ `AgentPlanner` + `AgentExecutor`
-* ✅ Multi-step workflow persistence
-* ✅ Multi-agent collaboration
-* ✅ Agents use Phase 4 tools natively
+- 📋 CLI voice commands (#69)
+- 📋 Voice integration tests (#78)
 
 ---
 
-## 🌐 Phase 7 — Web UI 💭 Considering (`v1.0.0`)
+# 🤖 Phase 6 — Agent System ✅ Core Complete
 
-* 💭 Angular 21 + Angular Material
-* 💭 Real-time streaming chat
-* 💭 Document upload UI
-* 💭 Memory management panel
-* 💭 Agent dashboard
-* 💭 Voice interface in browser
+**Released:** `v0.6.0` (July 2026)
 
----
+## Core
 
-## ❌ What We Will NOT Build
+- ✅ ReACT pattern
+- ✅ AgentPlanner
+- ✅ AgentExecutor
+- ✅ AgentOrchestrator
+- ✅ Agent & AgentStep domain models
+- ✅ Lifecycle state machine
+- ✅ Compare-and-set DB updates
+- ✅ SSE streaming
+- ✅ Client disconnect detection
+- ✅ Multi-step persistence (V15–V16)
+- ✅ Uses Phase 4 tools
+- ✅ Agent REST API (#85)
+- ✅ AgentController tests (#116)
+- ✅ Agent API integration tests (#116)
 
-| Won't Build                | Why                            |
-| -------------------------- | ------------------------------ |
-| Cloud SaaS product         | Jarvis is self-hosted only     |
-| Our own LLM                | We orchestrate existing models |
-| Central telemetry          | No data collection ever        |
-| Microservices from day one | Monolith-first architecture    |
+## Endpoints
 
----
+```text
+POST   /api/v1/agents/stream
+POST   /api/v1/agents
+GET    /api/v1/agents
+GET    /api/v1/agents/{id}
+GET    /api/v1/agents/{id}/steps
+DELETE /api/v1/agents/{id}
+```
 
-## 🗓️ Timeline
+### Contributor Tasks
 
-| Version  | Target                          |
-| -------- | ------------------------------- |
-| `v0.1.0` | ✅ Released — June 2026          |
-| `v0.2.0` | Core ✅ — Q3 2026                |
-| `v0.3.0` | Core ✅ — Q3 2026                |
-| `v0.4.0` | Core ✅ — June 2026              |
-| `v0.5.0` | Q3 2026 — Voice Assistant       |
-| `v0.6.0` | Q4 2026 — Agents                |
-| `v1.0.0` | 2027 — Web UI + Full Platform   |
-
----
-
-## 🤝 How To Help
-
-| Area                      | Phase   | Skill Required    |
-| ------------------------- | ------- | ----------------- |
-| CLI tool commands         | Phase 4 | Spring Shell 4    |
-| Tool integration tests    | Phase 4 | JUnit 5           |
-| OpenRouter provider       | Phase 4 | Spring AI         |
-| CLI memory commands       | Phase 2 | Spring Shell 4    |
-| Document REST API         | Phase 3 | Spring WebFlux    |
-| CLI document commands     | Phase 3 | Spring Shell 4    |
-| PDF text extraction       | Phase 3 | Apache PDFBox     |
-| CLI voice commands        | Phase 5 | Spring Shell 4    |
-| Voice REST API            | Phase 5 | Spring WebFlux    |
-| Architecture diagrams     | All     | draw.io           |
-| Documentation             | All     | Technical Writing |
+- 📋 CLI agent commands (#84)
 
 ---
 
-*Last reviewed: June 2026*
+# 🌐 Phase 7 — Web UI 🔨 In Progress (v1.0.0)
+
+**Status:** Framework vote active — July 14, 2026
+
+## Framework Options
+
+- 💭 Angular 21 + Angular Material
+- 💭 React 18 + TypeScript
+- 💭 Vue 3 + TypeScript
+- 💭 Next.js
+
+## Planned Features
+
+- 💭 Streaming chat
+- 💭 Session sidebar
+- 💭 Memory management
+- 💭 Document upload
+- 💭 Agent dashboard
+- 💭 Browser voice interface
+- 💭 Settings panel
+- 💭 JWT authentication
+
+## Backend Ready
+
+| Endpoint | Status |
+|----------|--------|
+| GET /api/v1/settings | ✅ Done (#93) |
+| PATCH /api/v1/settings/voice | ✅ Done (#94) |
+| GET /api/v1/documents/{id}/status | ✅ Done (#95) |
+
+Sub-issues will be opened after the framework vote.
+
+---
+
+# ❌ What We Will NOT Build
+
+| Won't Build | Why |
+|-------------|-----|
+| Cloud SaaS | Self-hosted only |
+| Our own LLM | Uses existing models |
+| Central telemetry | Privacy-first |
+| Microservices from day one | Monolith-first |
+
+---
+
+# 🗓️ Timeline
+
+| Version | Status |
+|----------|--------|
+| v0.1.0 | ✅ Released |
+| v0.2.0 | ✅ Complete |
+| v0.3.0 | ✅ Complete |
+| v0.4.0 | ✅ Complete |
+| v0.5.0 | ✅ Complete |
+| v0.6.0 | ✅ Complete |
+| v1.0.0 | 🔨 In Progress |
+
+---
+
+# 🤝 How To Help
+
+| Area | Phase | Skill |
+|------|-------|------|
+| CLI Tool Commands | Phase 4 | Spring Shell |
+| OpenRouter Provider | Phase 4 | Spring AI |
+| CLI Voice Commands | Phase 5 | Spring Shell |
+| Voice Integration Tests | Phase 5 | JUnit 5 |
+| CLI Document Commands | Phase 3 | Spring Shell |
+| PDF Extraction | Phase 3 | Apache PDFBox |
+| CLI Agent Commands | Phase 6 | Spring Shell |
+| Rate Limiting | Phase 1 | Spring WebFlux |
+| Token Count Display | Phase 1 | Spring Shell |
+| Docker Image | Phase 1 | Docker |
+| Web UI | Phase 7 | Angular / React / Vue |
+| Architecture Diagrams | All | draw.io |
+| Documentation | All | Technical Writing |
+
+---
+
+# 📦 Complete Issue Tracker
+
+| Issue | Title | Phase | Status |
+|------|------|------|------|
+| #3 | Token count display | Phase 1 | 📋 Open |
+| #4 | Examples command | Phase 1 | 📋 Open |
+| #6 | Docker image + publish | Phase 1 | 📋 Open |
+| #7 / #68 | OpenRouter provider | Phase 4 | 📋 Open |
+| #8 | Conversation summarization | Phase 2 | 📋 Open |
+| #11 | Rate limiting | Phase 1 | 📋 Open |
+| #34 | CLI memory commands | Phase 2 | ✅ Merged |
+| #35 | Memory REST API | Phase 2 | ✅ Merged |
+| #37 | Conversation summarization | Phase 2 | 📋 Open |
+| #47 | Semantic search | Phase 2 | ✅ Merged |
+| #50 | Document REST API | Phase 3 | ✅ Merged |
+| #51 | CLI document commands | Phase 3 | 📋 Open |
+| #52 | PDF extraction | Phase 3 | 📋 Open |
+| #53 | MemoryExtractionService tests | Phase 2 | ✅ Merged |
+| #55 | AiOrchestrator tests | Phase 1 | ✅ Merged |
+| #66 | CLI tool commands | Phase 4 | 📋 Open |
+| #67 | Tool integration tests | Phase 4 | ✅ Merged |
+| #69 | CLI voice commands | Phase 5 | 📋 Open |
+| #70 | Voice REST API | Phase 5 | ✅ Merged |
+| #71 | WeatherTool + WebSearch tests | Phase 4 | ✅ Merged |
+| #78 | Voice integration tests | Phase 5 | 📋 Open |
+| #84 | CLI agent commands | Phase 6 | 📋 Open |
+| #85 | Agent integration tests | Phase 6 | ✅ Merged |
+| #93 | GET /settings | Phase 7 | ✅ Merged |
+| #94 | PATCH /settings/voice | Phase 7 | ✅ Merged |
+| #95 | GET /documents/{id}/status | Phase 7 | ✅ Merged |
+| #114 | CLI memory commands PR | Phase 2 | ✅ Merged |
+| #115 | Document REST API PR | Phase 3 | ✅ Merged |
+| #116 | Agent tests PR | Phase 6 | ✅ Merged |
+
+---
+Last reviewed: July 2026
+---
+> **Your AI. Your Data. Your Machine.**
