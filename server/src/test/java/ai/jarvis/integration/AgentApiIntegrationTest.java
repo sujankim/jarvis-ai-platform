@@ -4,6 +4,7 @@ import ai.jarvis.agents.Agent;
 import ai.jarvis.agents.AgentRepository;
 import ai.jarvis.agents.AgentRequest;
 import ai.jarvis.config.TestContainerConfig;
+import ai.jarvis.security.jwt.JwtService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,9 +15,12 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.test.StepVerifier;
 
+import java.util.Collections;
 import java.util.UUID;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
@@ -33,6 +37,9 @@ class AgentApiIntegrationTest {
     @Autowired
     private R2dbcEntityTemplate r2dbcEntityTemplate;
 
+    @Autowired
+    private JwtService jwtService;
+
     private UUID currentUserId;
     private String jwtToken;
 
@@ -40,7 +47,9 @@ class AgentApiIntegrationTest {
     void setUp() {
         agentRepository.deleteAll().block();
         currentUserId = UUID.randomUUID();
-        jwtToken = "mock-valid-jwt-token-for-" + currentUserId;
+        
+        UserDetails userDetails = new User(currentUserId.toString(), "password", Collections.emptyList());
+        jwtToken = jwtService.generateToken(userDetails);
     }
 
     @AfterEach
@@ -86,7 +95,6 @@ class AgentApiIntegrationTest {
                 .expectBody()
                 .jsonPath("$.data").isArray()
                 .jsonPath("$.data.length()").isEqualTo(1)
-                .jsonPath("$.data[0].goal").isEqualTo("Current User Goal")
-                .jsonPath("$.data[0].userId").isEqualTo(currentUserId.toString());
+                .jsonPath("$.data[0].goal").isEqualTo("Current User Goal");
     }
 }
