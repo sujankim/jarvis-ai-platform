@@ -74,7 +74,6 @@ class AgentTest {
                         UUID.randomUUID(), null, "Test")
                 .withRunning();
 
-        // Cannot go RUNNING → RUNNING
         assertThatThrownBy(running::withRunning)
                 .isInstanceOf(
                         IllegalStateException.class)
@@ -109,7 +108,6 @@ class AgentTest {
         Agent agent = Agent.create(
                 UUID.randomUUID(), null, "Test");
 
-        // Cannot go PENDING → COMPLETED directly
         assertThatThrownBy(() ->
                 agent.withCompleted("answer", 1, 100))
                 .isInstanceOf(
@@ -133,6 +131,20 @@ class AgentTest {
         assertThat(failed.errorMessage())
                 .isEqualTo("Tool timed out");
         assertThat(failed.completedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("withFailed() sets finalAnswer to null — satisfies DB constraint")
+    void shouldSetFinalAnswerNullOnFailed() {
+        Agent agent = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
+
+        Agent failed = agent.withFailed("Some error");
+
+        assertThat(failed.finalAnswer()).isNull();
+        assertThat(failed.status())
+                .isEqualTo(AgentStatus.FAILED);
     }
 
     @Test
@@ -163,6 +175,35 @@ class AgentTest {
     }
 
     @Test
+    @DisplayName("withCancelled() sets finalAnswer to null — satisfies DB constraint")
+    void shouldSetFinalAnswerNullOnCancelled() {
+        // DB constraint: final_answer IS NULL OR status = 'COMPLETED'
+        // withCancelled() must always produce null finalAnswer.
+        Agent running = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
+
+        Agent cancelled = running.withCancelled();
+
+        assertThat(cancelled.finalAnswer()).isNull();
+        assertThat(cancelled.errorMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("withCancelled() sets errorMessage to null — satisfies DB constraint")
+    void shouldSetErrorMessageNullOnCancelled() {
+        // DB constraint: error_message IS NULL OR status = 'FAILED'
+        // withCancelled() must always produce null errorMessage.
+        Agent running = Agent.create(
+                        UUID.randomUUID(), null, "Test")
+                .withRunning();
+
+        Agent cancelled = running.withCancelled();
+
+        assertThat(cancelled.errorMessage()).isNull();
+    }
+
+    @Test
     @DisplayName("withCancelled() throws if already terminal")
     void shouldThrowWhenCancellingTerminal() {
         Agent completed = Agent.create(
@@ -189,7 +230,7 @@ class AgentTest {
         Agent step2 = step1.withIncrementedStepCount();
         assertThat(step2.stepCount()).isEqualTo(2);
 
-        // Originals unchanged
+        // Originals unchanged — immutable record
         assertThat(agent.stepCount()).isEqualTo(0);
     }
 
@@ -280,7 +321,6 @@ class AgentTest {
                 UUID.randomUUID(),
                 2, "tool", "result");
 
-        // OBSERVE is already DONE — cannot go RUNNING
         assertThatThrownBy(observe::withRunning)
                 .isInstanceOf(
                         IllegalStateException.class)

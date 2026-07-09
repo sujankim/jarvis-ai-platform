@@ -13,14 +13,23 @@ import java.util.UUID;
  * IMMUTABLE RECORD:
  * Use Agent.create() to make a new agent.
  * Use withXxx() to create updated copies.
- * Never mutate directly — same pattern as Memory.java.
+ * Never mutate directly.
  *
  * LIFECYCLE TRANSITIONS:
- * create() → PENDING
- * withRunning() → RUNNING
- * withCompleted() → COMPLETED + stores finalAnswer
- * withFailed() → FAILED + stores errorMessage
- * withCancelled() → CANCELLED
+ * create()        → PENDING
+ * withRunning()   → RUNNING   (requires PENDING)
+ * withCompleted() → COMPLETED (requires RUNNING)
+ * withFailed()    → FAILED    (requires RUNNING)
+ * withCancelled() → CANCELLED (any non-terminal)
+ *
+ * DB CONSTRAINTS (V15 migration):
+ * final_answer IS NULL OR status = 'COMPLETED'
+ * error_message IS NULL OR status = 'FAILED'
+ *
+ * withFailed() and withCancelled() must explicitly
+ * set finalAnswer = null to satisfy the DB constraint.
+ * Carrying through a non-null finalAnswer from a prior
+ * state would cause the UPDATE to be rejected.
  */
 @Table("agents")
 public record Agent(
@@ -82,7 +91,7 @@ public record Agent(
     // ── State Guards ──────────────────────────────
 
     /**
-     * Check if the agent is in the terminal state.
+     * Check if the agent is in a terminal state.
      * Terminal agents cannot transition to any other state.
      */
     private boolean isTerminal() {
@@ -129,8 +138,8 @@ public record Agent(
 
     /**
      * RUNNING → COMPLETED.
-     * requireStatus(RUNNING) prevents
-     * jumping to COMPLETED from PENDING.
+     * requireStatus(RUNNING) prevents jumping
+     * to COMPLETED from PENDING.
      */
     public Agent withCompleted(
             String answer,
@@ -141,23 +150,29 @@ public record Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.COMPLETED,
                 answer, totalSteps,
-                null,           // no error
+                null,
                 totalDurationMs,
                 createdAt, Instant.now(),
-                Instant.now()); // completedAt   = now
+                Instant.now());
     }
 
     /**
      * RUNNING → FAILED.
-     * requireStatus(RUNNING) prevents
-     * failing a PENDING or already terminal agent.
+     * requireStatus(RUNNING) prevents failing
+     * a PENDING or already terminal agent.
+     *
+     * finalAnswer explicitly set to null.
+     * DB constraint: final_answer IS NULL OR status = 'COMPLETED'.
+     * Carrying through a non-null finalAnswer from a prior
+     * state would cause the DB UPDATE to be rejected.
      */
     public Agent withFailed(String error) {
         requireStatus(AgentStatus.RUNNING);
         return new Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.FAILED,
-                finalAnswer, stepCount,
+                null,
+                stepCount,
                 error, durationMs,
                 createdAt, Instant.now(),
                 Instant.now());
@@ -165,8 +180,16 @@ public record Agent(
 
     /**
      * Any non-terminal → CANCELLED.
-     * isTerminal() check prevents
-     * cancelling an already completed agent.
+     * isTerminal() check prevents cancelling
+     * an already completed agent.
+     *
+     * finalAnswer explicitly set to null.
+     * DB constraint: final_answer IS NULL OR status = 'COMPLETED'.
+     * A CANCELLED agent never has a final answer.
+     *
+     * errorMessage explicitly set to null.
+     * DB constraint: error_message IS NULL OR status = 'FAILED'.
+     * A CANCELLED agent has no error message.
      */
     public Agent withCancelled() {
         if (isTerminal()) {
@@ -177,8 +200,10 @@ public record Agent(
         return new Agent(
                 id, userId, sessionId, goal,
                 AgentStatus.CANCELLED,
-                finalAnswer, stepCount,
-                null, durationMs,
+                null,
+                stepCount,
+                null,
+                durationMs,
                 createdAt, Instant.now(),
                 Instant.now());
     }
