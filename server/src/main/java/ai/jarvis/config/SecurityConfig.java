@@ -20,15 +20,16 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
 
-    // ─── Public endpoints — no JWT needed ─────────────────────────
+    // Public endpoints — no JWT required.
+    // Use CLI commands (status, doctor, benchmark-latency)
+    // to verify Ollama connectivity instead.
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/auth/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/webjars/**",
-            "/actuator/health",
-            "/api/test/**"
+            "/actuator/health"
     };
 
     @Bean
@@ -41,7 +42,6 @@ public class SecurityConfig {
                         SecurityWebFiltersOrder.AUTHENTICATION
                 )
                 .authorizeExchange(exchanges -> exchanges
-                        // Public endpoints — no auth needed
                         .pathMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .anyExchange().authenticated()
                 )
