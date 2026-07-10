@@ -14,18 +14,19 @@ import java.util.UUID;
 /**
  * Orchestrates the full voice conversation loop.
  *
- * FIXES (CodeRabbit Round 2):
+ * TWO-PIPELINE ARCHITECTURE:
+ * tokenStream is shared via .share() so both
+ * the SSE pipeline and the TTS pipeline receive
+ * the exact same tokens from a single Ollama call.
  *
- * Fix 1: generateAudioBytes() added.
- * /speak/bytes needs bytes back, not server playback.
- * speakText() calls speakAndPlay() → void → wrong.
- * generateAudioBytes() calls speak() → Mono<byte[]>.
+ * Without .share(), orchestrator.chat() is a cold Flux.
+ * Each subscriber triggers a separate AI call — meaning
+ * Ollama is called twice and TTS speaks different content
+ * than what the browser receives via SSE.
  *
- * Fix 2: SSE tokens independent from TTS.
- * BEFORE: emit token AFTER TTS completes → blocks SSE
- * AFTER:  token stream → SSE immediately (fast path)
- *         sentence buffer → TTS in parallel (slow path)
- * Two independent pipelines — UI gets incremental output.
+ * .share() = .publish().refCount()
+ * Starts on first subscriber, multicasts to all subsequent
+ * subscribers, terminates when all unsubscribe.
  */
 @Slf4j
 @Service
@@ -51,9 +52,10 @@ public class VoiceConversationService {
      * - Then:  TOKEN events (AI response, streamed fast)
      * - TTS:   plays sentences in background (parallel)
      *
-     * FIX Issue 2: SSE tokens are NOT blocked by TTS.
-     * Tokens stream to client immediately as AI generates.
-     * TTS runs as a side effect on parallel scheduler.
+     * tokenStream uses .share() to multicast a single
+     * Ollama call to both the SSE pipeline and the TTS
+     * pipeline. Without .share(), each pipeline subscribes
+     * independently triggering two separate AI calls.
      *
      * @param audioBytes  raw audio from microphone
      * @param sessionId   existing session (null = new)
@@ -97,15 +99,23 @@ public class VoiceConversationService {
                                     VoiceChatEvent.session(
                                             resolvedSessionId));
 
-                    // FIX Issue 2: separate pipelines
+                    // .share() converts the cold Flux from
+                    // orchestrator.chat() into a hot multicast Flux.
+                    // Both the SSE pipeline and the TTS pipeline
+                    // subscribe to the SAME upstream — one Ollama call,
+                    // same tokens delivered to both consumers.
                     Flux<String> tokenStream =
-                            orchestrator.chat(request);
+                            orchestrator.chat(request)
+                                    .share();
 
-                    // Run TTS in background
-                    // Does NOT block SSE token emission
+                    // TTS runs in background on boundedElastic.
+                    // Subscribes to the shared tokenStream —
+                    // does NOT trigger a new AI call.
                     startTtsPipeline(tokenStream);
 
-                    // Emit tokens immediately to SSE
+                    // SSE stream — also subscribes to the shared
+                    // tokenStream. Receives the same tokens as TTS.
+                    // Neither blocks the other.
                     Flux<VoiceChatEvent> tokenEvents =
                             tokenStream.map(
                                     VoiceChatEvent::token);
@@ -140,7 +150,7 @@ public class VoiceConversationService {
     }
 
     /**
-     * FIX Issue 1: Generate audio bytes from text.
+     * Generate audio bytes from text.
      * /speak/bytes needs byte[] not server playback.
      *
      * Calls speak() → Mono<byte[]> (returns audio data)
@@ -154,7 +164,7 @@ public class VoiceConversationService {
     }
 
     /**
-     * Check if voice features are available.
+     * Check if both voice features are available.
      *
      * @return true if both TTS and Whisper ready
      */
@@ -177,22 +187,17 @@ public class VoiceConversationService {
     // ── Private Helpers ───────────────────────────
 
     /**
-     * FIX Issue 2: TTS pipeline runs independently.
+     * TTS pipeline runs independently from SSE stream.
      *
-     * Starts a SEPARATE subscription to the token stream
-     * that buffers into sentences and speaks them.
-     * This pipeline runs on boundedElastic (background).
+     * Starts a subscription to the shared tokenStream.
+     * Because tokenStream uses .share(), this subscription
+     * receives the same tokens as the SSE subscriber
+     * without triggering a new upstream AI call.
      *
-     * The ORIGINAL tokenStream subscription (SSE)
-     * is completely unaffected — tokens stream fast.
+     * Buffers tokens into sentences before speaking.
+     * Runs entirely on boundedElastic — never blocks SSE.
      *
-     * WHY separate subscription works:
-     * AiOrchestrator.chat() returns a HOT-ish Flux.
-     * Both subscribers receive all tokens independently.
-     * SSE subscriber: emit immediately
-     * TTS subscriber: buffer → sentence → speak
-     *
-     * @param tokenStream Flux<String> from AiOrchestrator
+     * @param tokenStream shared Flux from orchestrator.chat()
      */
     private void startTtsPipeline(
             Flux<String> tokenStream) {
@@ -200,7 +205,6 @@ public class VoiceConversationService {
         StringBuilder buffer = new StringBuilder();
 
         tokenStream
-                // Buffer tokens into sentences
                 .flatMap(token -> {
                     buffer.append(token);
 
@@ -224,15 +228,15 @@ public class VoiceConversationService {
                     }
                     return Flux.<String>empty();
                 })
-                // Flush remaining buffer at end
+                // Flush remaining buffer at end of stream
                 .concatWith(Mono.fromCallable(() -> {
                     String remaining =
                             buffer.toString().trim();
                     buffer.setLength(0);
                     return remaining;
                 }).filter(s -> !s.isBlank()))
-                // Speak sentences sequentially
-                // concatMap = one at a time
+                // concatMap = sequential sentence playback
+                // flatMap would overlap audio — incorrect
                 .concatMap(sentence ->
                         textToSpeechService
                                 .speakAndPlay(sentence)
@@ -246,8 +250,7 @@ public class VoiceConversationService {
                                             e.getMessage());
                                     return Mono.empty();
                                 }))
-                // Subscribe on background thread
-                // Never blocks the SSE token stream
+                // Background thread — never blocks SSE
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         null,
