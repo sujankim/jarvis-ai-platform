@@ -252,6 +252,173 @@ Sub-issues will be opened after the framework vote.
 
 ---
 
+# 🔧 Phase 8 — Local Workstation Hub 📋 Planned
+
+**Target:** `v0.8.0` — After Phase 7 Web UI ships
+
+**Vision:** Extend the ReACT `AgentExecutor` to orchestrate industry-standard open-source command-line tools already installed on the user's machine. No new infrastructure—just new `JarvisTool` implementations following the existing tool engine architecture.
+
+> **Everything in Phase 8 runs 100% locally.**  
+> No cloud. No telemetry. No new dependencies beyond what the user already has installed.
+
+---
+
+## 🎬 Media Processing Tools
+
+### FfmpegTool — Natural Language Video & Audio Editing
+
+```text
+User: "Trim the last 10 seconds of recording.wav"
+Jarvis → FfmpegTool → ffmpeg command → output.wav
+
+User: "Compress this video to under 50MB"
+Jarvis → FfmpegTool → ffmpeg command → compressed.mp4
+```
+
+**Implementation**
+
+- Wraps the FFmpeg CLI via `ProcessBuilder`
+- Follows the same pattern as `SystemTextToSpeechService`
+- Requires FFmpeg to be installed
+    - Linux/macOS: commonly pre-installed or easily available
+    - Windows: documented installation step
+- Prevents shell injection through strict input sanitization
+
+---
+
+### ImageMagickTool — Batch Image Processing
+
+```text
+User: "Convert all PNGs in this folder to WebP"
+
+User: "Resize this image to 1920x1080"
+
+User: "Strip metadata from these photos"
+```
+
+**Implementation**
+
+- Wraps the ImageMagick CLI
+- Converts natural-language requests into ImageMagick command chains
+- Supports batch image operations
+
+---
+
+### SoxTool — Audio Cleanup Before Transcription
+
+```text
+Automatic noise removal before WhisperTranscriptionService
+
+User: "Clean up this recording before transcribing"
+```
+
+**Benefits**
+
+- Integrates directly into the voice pipeline
+- Improves Whisper transcription accuracy
+- Wraps the SoX CLI
+- Available on most Linux systems and easily installable elsewhere
+
+---
+
+## 🌐 Browser Automation
+
+### BrowserTool — Headless Chromium Research Assistant
+
+```text
+User: "Fetch the latest Spring Boot release notes"
+
+User: "Summarize this documentation page"
+```
+
+**Implementation**
+
+- Playwright or Selenium driving headless Chromium
+- Returns rendered page content for AI summarization
+- Runs entirely locally
+- Privacy-respecting with no tracking
+
+**Notes**
+
+- Memory usage: ~200–500 MB per browser instance
+- Planned for the later part of Phase 8 after media tools are stable
+
+---
+
+## 🔄 Cross-Device Sync
+
+### Syncthing Integration — Local Peer-to-Peer Sync
+
+```text
+Sync memories, documents, and workspace configuration
+across PC, laptop, and Android.
+
+No cloud.
+No accounts.
+Local Wi-Fi only.
+```
+
+**Implementation**
+
+- Syncthing REST API integration
+- Backup and restore of memory database
+- Sync uploaded documents across devices
+- Sync text content only; regenerate embeddings on each device since `pgvector` embeddings are model-specific
+
+---
+
+## 📊 Progress Analytics
+
+### Git Analytics Tool
+
+```text
+User: "How much did I code this week?"
+
+User: "What files have I been working on?"
+```
+
+**Implementation**
+
+- Wraps the Git CLI via `ProcessBuilder`
+- Reads local Git history
+- Generates AI-powered summaries
+- No filesystem access beyond Git metadata
+- Feeds insights into the memory system as contextual memories
+
+---
+
+### Learning Progress Dashboard
+
+A new dashboard panel in the Phase 7 Web UI providing:
+
+- Visual progress charts
+- Chart.js or Mermaid visualizations
+- Learning and productivity insights
+- Powered entirely by the existing memory system
+- No additional backend infrastructure required
+
+---
+
+# 🗓️ Phase 8 Candidate Issues
+
+| Feature | Implementation Pattern | Difficulty |
+|---------|-------------------------|------------|
+| FfmpegTool | `ProcessBuilder` + `JarvisTool` | Intermediate |
+| SoxTool (voice cleanup) | `ProcessBuilder` + `JarvisTool` | Beginner |
+| ImageMagickTool | `ProcessBuilder` + `JarvisTool` | Beginner |
+| BrowserTool (Chromium) | Playwright + `JarvisTool` | Advanced |
+| Syncthing backup & restore | REST API + `JarvisTool` | Intermediate |
+| Git analytics tool | `ProcessBuilder` + `JarvisTool` | Beginner |
+| Progress dashboard panel | Chart.js (Web UI) | Intermediate |
+
+---
+
+**Phase 8 Goal**
+
+Bring everyday workstation automation into Jarvis while staying true to the project's core philosophy:
+
+> **Your AI. Your Data. Your Machine.**
+
 # ❌ What We Will NOT Build
 
 | Won't Build | Why |
@@ -260,6 +427,10 @@ Sub-issues will be opened after the framework vote.
 | Our own LLM | Uses existing models |
 | Central telemetry | Privacy-first |
 | Microservices from day one | Monolith-first |
+| VSCodium LSP bridge | A separate product requiring its own engineering effort, release cycle, and maintenance. Better developed as an independent project built on top of Jarvis. |
+| Cross-device pgvector sync | Vector embeddings are model-specific and should be regenerated on each machine. Sync raw content instead of embeddings. |
+| Cloud sync of any kind | Violates Jarvis' local-first philosophy: **Your AI. Your Data. Your Machine.** |
+| Camera AI / pose detection | Outside the scope of Jarvis. This belongs to a different product category focused on computer vision rather than AI orchestration. |
 
 ---
 
