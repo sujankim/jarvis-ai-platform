@@ -60,7 +60,7 @@
         <spring-shell.version>4.0.2</spring-shell.version>
         <lombok.version>1.18.46</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
-        <bouncycastle.version>1.84</bouncycastle.version>
+        <bouncycastle.version>1.85</bouncycastle.version>
         <jjwt.version>0.12.7</jjwt.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <postgresql.version>42.7.11</postgresql.version>
