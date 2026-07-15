@@ -1,0 +1,17 @@
+@use '../variables' as *;
+
+// Applied when .light-theme class on body
+.light-theme {
+  --bg-primary:      #{$bg-primary-light};
+  --bg-secondary:    #{$bg-secondary-light};
+  --bg-tertiary:     #{$bg-tertiary-light};
+  --bg-elevated:     #{$bg-elevated-light};
+
+  --text-primary:    #{$text-primary-light};
+  --text-secondary:  #{$text-secondary-light};
+  --text-muted:      #{$text-muted-light};
+
+  --accent-primary:  #{$accent-primary};
+  --accent-hover:    #{$accent-hover};
+  --accent-subtle:   #e0e7ff;
+}

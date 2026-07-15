@@ -1,0 +1,66 @@
+// ── Color Palette ─────────────────────────────────
+// Dark theme (default)
+$bg-primary:      #0f1117;
+$bg-secondary:    #1a1d27;
+$bg-tertiary:     #242736;
+$bg-elevated:     #2d3147;
+
+$text-primary:    #f0f2f8;
+$text-secondary:  #9ca3b8;
+$text-muted:      #5c6480;
+
+$accent-primary:  #6366f1;   // indigo — Jarvis brand color
+$accent-hover:    #818cf8;
+$accent-subtle:   #1e2040;
+
+$success:         #10b981;
+$warning:         #f59e0b;
+$error:           #ef4444;
+$info:            #3b82f6;
+
+// Light theme overrides (applied via .light-theme class)
+$bg-primary-light:    #ffffff;
+$bg-secondary-light:  #f8f9fc;
+$bg-tertiary-light:   #f0f2f8;
+$bg-elevated-light:   #e8eaf4;
+
+$text-primary-light:  #0f1117;
+$text-secondary-light:#4b5563;
+$text-muted-light:    #9ca3af;
+
+// ── Memory type badge colors ──────────────────────
+$memory-fact:       #3b82f6;   // blue
+$memory-goal:       #10b981;   // green
+$memory-preference: #8b5cf6;   // purple
+$memory-context:    #f59e0b;   // orange
+$memory-event:      #ef4444;   // red
+
+// ── Spacing ───────────────────────────────────────
+$space-xs:   4px;
+$space-sm:   8px;
+$space-md:   16px;
+$space-lg:   24px;
+$space-xl:   32px;
+$space-2xl:  48px;
+
+// ── Border radius ─────────────────────────────────
+$radius-sm:  6px;
+$radius-md:  10px;
+$radius-lg:  16px;
+$radius-full: 9999px;
+
+// ── Typography ────────────────────────────────────
+$font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+$font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+
+$font-xs:   12px;
+$font-sm:   14px;
+$font-md:   16px;
+$font-lg:   18px;
+$font-xl:   24px;
+$font-2xl:  32px;
+
+// ── Sidebar ───────────────────────────────────────
+$sidebar-width:         240px;
+$sidebar-collapsed:     60px;
+$topbar-height:         60px;
