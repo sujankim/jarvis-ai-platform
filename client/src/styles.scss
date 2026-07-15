@@ -9,9 +9,6 @@
 @use 'styles/themes/dark';
 @use 'styles/themes/light';
 
-// Google Fonts
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 // Global body styles
 body {
   background-color: var(--bg-primary);
@@ -20,7 +17,6 @@ body {
 }
 
 // Angular Material theme overrides
-// Keep Material components consistent with our design
 .mat-mdc-button {
   font-family: $font-family !important;
 }
