@@ -77,12 +77,12 @@ spring:
 
     google:
       genai:
-        # Set GEMINI_API_KEY in .env to enable Gemini
         api-key: ${GEMINI_API_KEY:}
         chat:
-          # gemini-2.0-flash — stable free tier model
-          # https://ai.google.dev/gemini-api/docs/models/gemini
-          model: ${GEMINI_MODEL:gemini-2.0-flash}
+          # gemini-3.5-flash — current stable model (July 2026)
+          # gemini-2.0-flash was shut down June 1, 2026
+          # Reference: https://ai.google.dev/gemini-api/docs/deprecations
+          model: ${GEMINI_MODEL:gemini-3.5-flash}
           temperature: 0.7
           max-output-tokens: 2048
 
