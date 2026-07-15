@@ -37,8 +37,10 @@ public class GeminiProvider implements AiProvider {
     public GeminiProvider(
             @Value("${spring.ai.google.genai.api-key:}")
             String apiKey,
+            // gemini-3.5-flash — matches application.yml default
+            // gemini-2.0-flash was shut down June 1, 2026
             @Value("${spring.ai.google.genai.chat.model:"
-                    + "gemini-2.0-flash}")
+                    + "gemini-3.5-flash}")
             String modelName,
             ToolRegistry toolRegistry) {
 
