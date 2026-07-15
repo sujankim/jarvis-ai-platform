@@ -1,0 +1,22 @@
+// Reset and base
+@use 'styles/reset';
+
+// Design tokens
+@use 'styles/variables' as *;
+@use 'styles/mixins' as *;
+
+// Themes
+@use 'styles/themes/dark';
+@use 'styles/themes/light';
+
+// Global body styles
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: $font-family;
+}
+
+// Angular Material theme overrides
+.mat-mdc-button {
+  font-family: $font-family !important;
+}

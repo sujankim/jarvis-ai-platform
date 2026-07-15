@@ -1,0 +1,22 @@
+@use '../variables' as *;
+
+// Applied to :root by default
+:root {
+  --bg-primary:      #{$bg-primary};
+  --bg-secondary:    #{$bg-secondary};
+  --bg-tertiary:     #{$bg-tertiary};
+  --bg-elevated:     #{$bg-elevated};
+
+  --text-primary:    #{$text-primary};
+  --text-secondary:  #{$text-secondary};
+  --text-muted:      #{$text-muted};
+
+  --accent-primary:  #{$accent-primary};
+  --accent-hover:    #{$accent-hover};
+  --accent-subtle:   #{$accent-subtle};
+
+  --success:         #{$success};
+  --warning:         #{$warning};
+  --error:           #{$error};
+  --info:            #{$info};
+}
