@@ -1,1 +1,221 @@
-<div>Login — coming soon</div>
+<div class="login-page">
+
+  <!-- Logo + brand -->
+  <div class="brand">
+    <div class="brand__logo">J</div>
+    <h1 class="brand__name">Jarvis</h1>
+    <p class="brand__tagline">
+      Your AI. Your Data. Your Machine.
+    </p>
+  </div>
+
+  <!-- Card -->
+  <div class="card">
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button
+        class="tab"
+        [class.tab--active]="isLoginMode()"
+        (click)="switchMode('login')">
+        Sign In
+      </button>
+      <button
+        class="tab"
+        [class.tab--active]="!isLoginMode()"
+        (click)="switchMode('register')">
+        Create Account
+      </button>
+    </div>
+
+    <!-- Error message -->
+    @if (errorMessage()) {
+      <div class="alert alert--error">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    <!-- Success message -->
+    @if (successMessage()) {
+      <div class="alert alert--success">
+        {{ successMessage() }}
+      </div>
+    }
+
+    <!-- Login form -->
+    @if (isLoginMode()) {
+      <form
+        class="form"
+        [formGroup]="loginForm"
+        (ngSubmit)="onLogin()">
+
+        <div class="field">
+          <label class="field__label" for="login-username">
+            Username
+          </label>
+          <input
+            id="login-username"
+            class="field__input"
+            [class.field__input--error]="
+              getLoginError('username')"
+            type="text"
+            formControlName="username"
+            placeholder="your username"
+            autocomplete="username"/>
+          @if (getLoginError('username')) {
+            <span class="field__error">
+              {{ getLoginError('username') }}
+            </span>
+          }
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="login-password">
+            Password
+          </label>
+          <input
+            id="login-password"
+            class="field__input"
+            [class.field__input--error]="
+              getLoginError('password')"
+            type="password"
+            formControlName="password"
+            placeholder="••••••••"
+            autocomplete="current-password"/>
+          @if (getLoginError('password')) {
+            <span class="field__error">
+              {{ getLoginError('password') }}
+            </span>
+          }
+        </div>
+
+        <button
+          class="btn btn--primary"
+          type="submit"
+          [disabled]="loginForm.invalid || isLoading()">
+          @if (isLoading()) {
+            <span class="spinner"></span>
+            Signing in...
+          } @else {
+            Sign In
+          }
+        </button>
+
+      </form>
+    }
+
+    <!-- Register form -->
+    @if (!isLoginMode()) {
+      <form
+        class="form"
+        [formGroup]="registerForm"
+        (ngSubmit)="onRegister()">
+
+        <div class="field">
+          <label
+            class="field__label"
+            for="reg-username">
+            Username
+          </label>
+          <input
+            id="reg-username"
+            class="field__input"
+            [class.field__input--error]="
+              getRegisterError('username')"
+            type="text"
+            formControlName="username"
+            placeholder="choose a username"
+            autocomplete="username"/>
+          @if (getRegisterError('username')) {
+            <span class="field__error">
+              {{ getRegisterError('username') }}
+            </span>
+          }
+        </div>
+
+        <div class="field">
+          <label
+            class="field__label"
+            for="reg-email">
+            Email
+          </label>
+          <input
+            id="reg-email"
+            class="field__input"
+            [class.field__input--error]="
+              getRegisterError('email')"
+            type="email"
+            formControlName="email"
+            placeholder="you@example.com"
+            autocomplete="email"/>
+          @if (getRegisterError('email')) {
+            <span class="field__error">
+              {{ getRegisterError('email') }}
+            </span>
+          }
+        </div>
+
+        <div class="field">
+          <label
+            class="field__label"
+            for="reg-password">
+            Password
+          </label>
+          <input
+            id="reg-password"
+            class="field__input"
+            [class.field__input--error]="
+              getRegisterError('password')"
+            type="password"
+            formControlName="password"
+            placeholder="min 8 characters"
+            autocomplete="new-password"/>
+          @if (getRegisterError('password')) {
+            <span class="field__error">
+              {{ getRegisterError('password') }}
+            </span>
+          }
+        </div>
+
+        <div class="field">
+          <label
+            class="field__label"
+            for="reg-display-name">
+            Display Name
+            <span class="field__optional">
+              (optional)
+            </span>
+          </label>
+          <input
+            id="reg-display-name"
+            class="field__input"
+            type="text"
+            formControlName="displayName"
+            placeholder="how should Jarvis call you?"
+            autocomplete="name"/>
+        </div>
+
+        <button
+          class="btn btn--primary"
+          type="submit"
+          [disabled]="
+            registerForm.invalid || isLoading()">
+          @if (isLoading()) {
+            <span class="spinner"></span>
+            Creating account...
+          } @else {
+            Create Account
+          }
+        </button>
+
+      </form>
+    }
+
+    <!-- First user note -->
+    <p class="note">
+      The first account created becomes Admin.
+    </p>
+
+  </div>
+
+</div>
