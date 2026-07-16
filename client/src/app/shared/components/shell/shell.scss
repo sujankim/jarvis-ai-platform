@@ -1,0 +1,241 @@
+@use '../../../../styles/variables' as *;
+@use '../../../../styles/mixins' as *;
+
+// ── Shell layout ──────────────────────────────────
+
+.shell {
+  display: grid;
+  grid-template-columns: $sidebar-width 1fr;
+  height: 100vh;
+  overflow: hidden;
+  transition: grid-template-columns 0.25s ease;
+
+  &--collapsed {
+    grid-template-columns: $sidebar-collapsed 1fr;
+  }
+}
+
+// ── Sidebar ───────────────────────────────────────
+
+.sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--bg-elevated);
+  @include flex-col;
+  height: 100vh;
+  overflow: hidden;
+  transition: width 0.25s ease;
+
+  &__brand {
+    @include flex-between;
+    padding: $space-lg $space-md;
+    min-height: $topbar-height;
+    border-bottom: 1px solid var(--bg-elevated);
+    gap: $space-sm;
+    overflow: hidden;
+  }
+
+  &__logo {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: $radius-sm;
+    background: $accent-primary;
+    color: #ffffff;
+    font-size: $font-md;
+    font-weight: 700;
+    @include flex-center;
+    flex-shrink: 0;
+  }
+
+  &__name {
+    font-size: $font-md;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  &__nav {
+    @include flex-col;
+    padding: $space-md $space-sm;
+    gap: $space-xs;
+    flex: 1;
+    overflow-y: auto;
+    @include custom-scrollbar;
+  }
+
+  &__footer {
+    @include flex-col;
+    padding: $space-md $space-sm;
+    gap: $space-sm;
+    border-top: 1px solid var(--bg-elevated);
+  }
+}
+
+// ── Nav items ─────────────────────────────────────
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  padding: 10px $space-sm;
+  border-radius: $radius-sm;
+  color: var(--text-secondary);
+  font-size: $font-sm;
+  font-weight: 500;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-decoration: none;
+
+  &:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  &--active {
+    background: $accent-subtle;
+    color: $accent-primary;
+
+    .nav-item__icon {
+      color: $accent-primary;
+    }
+  }
+
+  &__icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    color: inherit;
+  }
+
+  &__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+// ── User info ─────────────────────────────────────
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  overflow: hidden;
+
+  &__avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: $radius-full;
+    background: $accent-subtle;
+    color: $accent-primary;
+    font-size: $font-sm;
+    font-weight: 700;
+    @include flex-center;
+    flex-shrink: 0;
+  }
+
+  &__details {
+    @include flex-col;
+    overflow: hidden;
+    gap: 2px;
+  }
+
+  &__name {
+    font-size: $font-sm;
+    font-weight: 500;
+    color: var(--text-primary);
+    @include truncate;
+  }
+
+  &__role {
+    font-size: $font-xs;
+    color: var(--text-muted);
+  }
+}
+
+// ── Logout button ─────────────────────────────────
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  padding: 8px $space-sm;
+  border-radius: $radius-sm;
+  color: var(--text-muted);
+  font-size: $font-sm;
+  font-weight: 500;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: $error;
+  }
+
+  span.material-symbols-rounded {
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+}
+
+// ── Main area ─────────────────────────────────────
+
+.main {
+  @include flex-col;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+// ── Top bar ───────────────────────────────────────
+
+.topbar {
+  height: $topbar-height;
+  min-height: $topbar-height;
+  @include flex-between;
+  padding: 0 $space-lg;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--bg-elevated);
+
+  &__toggle {
+    color: var(--text-secondary);
+    padding: $space-xs;
+    border-radius: $radius-sm;
+    @include flex-center;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: var(--text-primary);
+    }
+
+    span {
+      font-size: 22px;
+    }
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: $space-md;
+  }
+
+  &__username {
+    font-size: $font-sm;
+    color: var(--text-secondary);
+  }
+}
+
+// ── Content area ──────────────────────────────────
+
+.content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}

@@ -1,0 +1,100 @@
+<div class="shell"
+     [class.shell--collapsed]="sidebarCollapsed()">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Logo -->
+    <div class="sidebar__brand">
+      <div class="sidebar__logo">J</div>
+      @if (!sidebarCollapsed()) {
+        <span class="sidebar__name">Jarvis</span>
+      }
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar__nav">
+      @for (item of navItems; track item.path) {
+        <a
+          class="nav-item"
+          [routerLink]="item.path"
+          routerLinkActive="nav-item--active"
+          [title]="sidebarCollapsed() ? item.label : ''">
+
+          <!-- Material icon -->
+          <span class="material-symbols-rounded nav-item__icon">
+            {{ item.icon }}
+          </span>
+
+          @if (!sidebarCollapsed()) {
+            <span class="nav-item__label">
+              {{ item.label }}
+            </span>
+          }
+        </a>
+      }
+    </nav>
+
+    <!-- Sidebar footer — user info + logout -->
+    <div class="sidebar__footer">
+      <div class="user-info">
+        <div class="user-info__avatar">
+          {{ displayName().charAt(0).toUpperCase() }}
+        </div>
+        @if (!sidebarCollapsed()) {
+          <div class="user-info__details">
+            <span class="user-info__name">
+              {{ displayName() }}
+            </span>
+            <span class="user-info__role">
+              {{ isAdmin() ? 'Admin' : 'User' }}
+            </span>
+          </div>
+        }
+      </div>
+
+      <button
+        class="logout-btn"
+        (click)="logout()"
+        [title]="sidebarCollapsed()
+          ? 'Logout' : ''">
+        <span class="material-symbols-rounded">
+          logout
+        </span>
+        @if (!sidebarCollapsed()) {
+          <span>Logout</span>
+        }
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- Main content area -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <button
+        class="topbar__toggle"
+        (click)="toggleSidebar()"
+        title="Toggle sidebar">
+        <span class="material-symbols-rounded">
+          {{ sidebarCollapsed() ? 'menu' : 'menu_open' }}
+        </span>
+      </button>
+
+      <div class="topbar__right">
+        <span class="topbar__username">
+          {{ username() }}
+        </span>
+      </div>
+    </header>
+
+    <!-- Page content -->
+    <main class="content">
+      <router-outlet />
+    </main>
+
+  </div>
+
+</div>
