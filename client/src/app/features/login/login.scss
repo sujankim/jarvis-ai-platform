@@ -1,0 +1,222 @@
+@use '../../../styles/variables' as *;
+@use '../../../styles/mixins' as *;
+
+// ── Page layout ───────────────────────────────────
+
+.login-page {
+  @include flex-col;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: $space-lg;
+  background: var(--bg-primary);
+  gap: $space-xl;
+}
+
+// ── Brand ─────────────────────────────────────────
+
+.brand {
+  @include flex-col;
+  align-items: center;
+  gap: $space-sm;
+  text-align: center;
+
+  &__logo {
+    width: 56px;
+    height: 56px;
+    border-radius: $radius-md;
+    background: $accent-primary;
+    color: #ffffff;
+    font-size: $font-xl;
+    font-weight: 700;
+    @include flex-center;
+  }
+
+  &__name {
+    font-size: $font-xl;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+  }
+
+  &__tagline {
+    font-size: $font-sm;
+    color: var(--text-muted);
+  }
+}
+
+// ── Card ──────────────────────────────────────────
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-elevated);
+  border-radius: $radius-lg;
+  padding: $space-xl;
+  @include flex-col;
+  gap: $space-lg;
+}
+
+// ── Tabs ──────────────────────────────────────────
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--bg-tertiary);
+  border-radius: $radius-md;
+  padding: 4px;
+  gap: 4px;
+}
+
+.tab {
+  padding: $space-sm $space-md;
+  border-radius: $radius-sm;
+  font-size: $font-sm;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+  cursor: pointer;
+
+  &--active {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  &:hover:not(.tab--active) {
+    color: var(--text-primary);
+  }
+}
+
+// ── Alerts ────────────────────────────────────────
+
+.alert {
+  padding: $space-sm $space-md;
+  border-radius: $radius-sm;
+  font-size: $font-sm;
+  font-weight: 500;
+
+  &--error {
+    background: rgba(239, 68, 68, 0.12);
+    color: $error;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  &--success {
+    background: rgba(16, 185, 129, 0.12);
+    color: $success;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+}
+
+// ── Form ──────────────────────────────────────────
+
+.form {
+  @include flex-col;
+  gap: $space-md;
+}
+
+// ── Field ─────────────────────────────────────────
+
+.field {
+  @include flex-col;
+  gap: $space-xs;
+
+  &__label {
+    font-size: $font-sm;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  &__optional {
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  &__input {
+    padding: 10px $space-md;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--bg-elevated);
+    border-radius: $radius-sm;
+    color: var(--text-primary);
+    font-size: $font-md;
+    transition: border-color 0.2s ease;
+    outline: none;
+
+    &::placeholder {
+      color: var(--text-muted);
+    }
+
+    &:focus {
+      border-color: $accent-primary;
+    }
+
+    &--error {
+      border-color: $error;
+
+      &:focus {
+        border-color: $error;
+      }
+    }
+  }
+
+  &__error {
+    font-size: $font-xs;
+    color: $error;
+  }
+}
+
+// ── Button ────────────────────────────────────────
+
+.btn {
+  padding: 12px $space-md;
+  border-radius: $radius-sm;
+  font-size: $font-md;
+  font-weight: 600;
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease;
+  @include flex-center;
+  gap: $space-sm;
+  margin-top: $space-xs;
+
+  &--primary {
+    background: $accent-primary;
+    color: #ffffff;
+
+    &:hover:not(:disabled) {
+      background: $accent-hover;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+// ── Spinner ───────────────────────────────────────
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+// ── Note ──────────────────────────────────────────
+
+.note {
+  font-size: $font-xs;
+  color: var(--text-muted);
+  text-align: center;
+}

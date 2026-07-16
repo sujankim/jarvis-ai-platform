@@ -1,33 +1,45 @@
 # Jarvis AI Platform — Claude Instructions
 
-## Project Context
+> Architecture and development guide for AI assistants contributing to Jarvis AI Platform.
 
-Jarvis is a local-first, open-source AI assistant platform built with the Java/Spring ecosystem.
+---
 
-GitHub: https://github.com/sujankim/jarvis-ai-platform
+# Project Context
 
-### Core Philosophy
+Jarvis is a **local-first, open-source AI assistant platform** built with **Java 21, Spring Boot 4, Spring AI**, and an **Angular 22 Web UI**.
 
-* Local AI first (Ollama) — cloud providers as optional fallback
-* Your data never leaves your machine
-* Privacy by architecture, not policy
-* Reactive-first architecture
-* Modular, phase-driven development
-* Open-source and developer-focused
+**GitHub**
+https://github.com/sujankim/jarvis-ai-platform
+
+---
+
+# Core Philosophy
+
+Jarvis exists to give users full ownership of their AI.
+
+Core principles:
+
+- Local AI first (Ollama)
+- Cloud providers are optional fallback only
+- Your data never leaves your machine
+- Privacy by architecture, not policy
+- Reactive-first backend
+- Modular, phase-driven development
+- Open-source and developer-focused
 
 ---
 
 # Current Phase Status
 
-| Phase   | Status          | Notes             |
-| ------- | --------------- | ----------------- |
-| Phase 1 | ✅ Released      | AI Chat + CLI     |
+| Phase | Status | Notes |
+|--------|--------|------|
+| Phase 1 | ✅ Released | AI Chat + CLI |
 | Phase 2 | ✅ Core Complete | Memory + pgvector |
-| Phase 3 | ✅ Core Complete | RAG Engine        |
+| Phase 3 | ✅ Core Complete | RAG Engine |
 | Phase 4 | ✅ Core Complete | Tool Engine + MCP |
-| Phase 5 | ✅ Core Complete | Voice Assistant   |
-| Phase 6 | 🔨 Next         | Agents            |
-| Phase 7 | 📋 Planned      | Web UI            |
+| Phase 5 | ✅ Core Complete | Voice Assistant |
+| Phase 6 | ✅ Core Complete | Agent System |
+| Phase 7 | 🔨 In Progress | Angular 22 Web UI |
 
 ---
 
@@ -89,118 +101,152 @@ VoiceConversationService
 
 ---
 
-# Tech Stack
+# Technology Stack
 
-| Layer            | Technology              |
-| ---------------- | ----------------------- |
-| Language         | Java 21                 |
-| Framework        | Spring Boot 4.0.6       |
-| AI               | Spring AI 2.0 (M8+)     |
-| Web              | Spring WebFlux          |
-| Database         | PostgreSQL 16           |
-| Vector Database  | pgvector 0.7.4          |
-| Data Access      | R2DBC                   |
-| Cache            | Redis 7                 |
-| Security         | Spring Security 7 + JWT |
-| Password Hashing | Argon2id                |
-| CLI              | Spring Shell 4          |
-| AI Tools         | Spring AI @Tool + MCP   |
-| Mapping          | MapStruct 1.6           |
-| API Docs         | SpringDoc OpenAPI       |
-| Migrations       | Flyway (V1–V15+)        |
+## Backend (`server/`)
+
+| Layer | Technology |
+|--------|------------|
+| Language | Java 21 |
+| Framework | Spring Boot 4.0.6 |
+| AI Framework | Spring AI 2.0.0-M8 |
+| Web | Spring WebFlux |
+| Security | Spring Security 7 |
+| Authentication | JWT + Argon2id |
+| Database | PostgreSQL 16 |
+| Vector Database | pgvector 0.7.4 |
+| Data Access | R2DBC + JDBC |
+| Cache | Redis 7 |
+| Migrations | Flyway (V1–V18+) |
+| Local AI | Ollama |
+| Chat Model | llama3.1:8b |
+| Embeddings | nomic-embed-text |
+| Cloud AI | Google Gemini |
+| Tools | Spring AI @Tool + MCP |
+| CLI | Spring Shell 4 |
+| Mapping | MapStruct 1.6 |
+| API Docs | SpringDoc OpenAPI |
 
 ---
 
-# Package Structure
+## Frontend (`client/`)
+
+| Layer | Technology |
+|--------|------------|
+| Framework | Angular 22 |
+| Language | TypeScript 6 |
+| UI Components | Angular Material 22 (partial) |
+| Styling | Custom SCSS + CSS Variables |
+| State | Angular Signals |
+| HTTP | Angular HttpClient |
+| Routing | Angular Router (lazy loading) |
+| Markdown | ngx-markdown |
+| Build | Angular CLI 22 + esbuild |
+
+---
+
+# Project Structure
 
 ```text
-ai.jarvis/
+jarvis-ai-platform/
+
+├── server/
+│   └── src/main/java/ai/jarvis/
+│       ├── ai/
+│       │   ├── orchestrator/
+│       │   ├── prompt/
+│       │   └── provider/
+│       │
+│       ├── agents/
+│       ├── chat/
+│       ├── cli/
+│       ├── common/
+│       ├── config/
+│       ├── memory/
+│       ├── observability/
+│       ├── rag/
+│       ├── security/
+│       ├── settings/
+│       ├── tools/
+│       │   ├── builtin/
+│       │   └── mcp/
+│       ├── user/
+│       └── voice/
 │
-├── ai/
-│   ├── orchestrator/
-│   ├── prompt/
-│   └── provider/
-│
-├── chat/
-│   ├── session/
-│   └── message/
-│
-├── cli/
-│
-├── memory/
-│   └── session/
-│
-├── rag/
-│   ├── extraction/
-│   └── processing/
-│
-├── tools/
-│   ├── builtin/
-│   │   ├── DateTimeTool
-│   │   ├── CalculatorTool
-│   │   ├── WeatherTool
-│   │   └── WebSearchTool
-│   │
-│   └── mcp/
-│       └── McpServerConfig
-│
-├── voice/                 Phase 5
-│   ├── WhisperTranscriptionService
-│   ├── SystemTextToSpeechService
-│   ├── VoiceConversationService
-│   ├── VoiceController
-│   └── exception/
-│       └── VoiceException
-│
-├── agents/                Phase 6
-│
-├── security/
-├── user/
-├── observability/
-├── common/
-└── config/
+└── client/
+    └── src/app/
+        ├── core/
+        │   ├── guards/
+        │   ├── interceptors/
+        │   ├── models/
+        │   └── services/
+        │
+        ├── shared/
+        │   └── components/
+        │
+        └── features/
+            ├── agents/
+            ├── chat/
+            ├── documents/
+            ├── login/
+            ├── memory/
+            ├── settings/
+            └── voice/
 ```
 
 ---
 
-# Architecture Rules
+# Backend Architecture Rules
 
 ## 1. AiProvider Interface Is Sacred
 
-* Every AI provider implements `AiProvider`
-* Provider selection is handled only by `ProviderRouter`
-* Providers receive `ToolRegistry`
-* Never call provider implementations directly
+Every AI provider implements `AiProvider`.
+
+Rules:
+
+- Provider selection only through `ProviderRouter`
+- Providers receive `ToolRegistry`
+- Never inject provider implementations directly
+- Never bypass ProviderRouter
 
 ---
 
 ## 2. Dependency Direction (STRICT)
 
 ```text
-CLI → Controllers → Services → Providers → Database
+CLI
+ ↓
+Controllers
+ ↓
+Services
+ ↓
+Providers
+ ↓
+Database
 ```
 
 Never bypass layers.
 
 ---
 
-## 3. AiOrchestrator Is the Only AI Coordinator
+## 3. AiOrchestrator Is The Only AI Coordinator
 
 Responsibilities:
 
-* Load session history
-* Load memory context
-* Load RAG context
-* Build prompts
-* Select provider
-* Execute tools
-* Save conversation history
+- Load session history
+- Load working memory
+- Load long-term memory
+- Load RAG context
+- Assemble prompt
+- Select provider
+- Execute tools
+- Persist conversation
 
-Controllers and CLI must never orchestrate AI workflows directly.
+Controllers and CLI **must never orchestrate AI workflows directly**.
 
 ---
 
-## 4. Prompt Assembly Order
+## 4. Prompt Assembly Order (FIXED)
 
 ```text
 1. System Prompt
@@ -211,7 +257,9 @@ Controllers and CLI must never orchestrate AI workflows directly.
 6. Current User Message
 ```
 
-Do not change this ordering without an architecture discussion.
+This order is architecture-critical.
+
+Do not modify without an architecture discussion.
 
 ---
 
@@ -219,7 +267,7 @@ Do not change this ordering without an architecture discussion.
 
 ```text
 tools/
-│
+
 ├── JarvisTool
 ├── ToolRegistry
 │
@@ -233,11 +281,29 @@ tools/
     └── McpServerConfig
 ```
 
-All built-in tools belong under `tools/builtin`.
+Rules:
+
+- Built-in tools belong only in `tools/builtin`
+- MCP components belong only in `tools/mcp`
+- Never place built-in tools elsewhere
 
 ---
 
-## 6. Voice Architecture
+## 6. Reactive Rules
+
+Jarvis is **reactive-first**.
+
+Rules:
+
+- All application queries use **R2DBC**
+- Vector operations use **JDBC**
+- Blocking work runs on `Schedulers.boundedElastic()`
+- Never block the WebFlux event loop
+- Never introduce blocking calls into reactive chains
+
+---
+
+## 7. Voice Architecture
 
 ```text
 VoiceController
@@ -246,18 +312,152 @@ VoiceController
 VoiceConversationService
         │
         ├── WhisperTranscriptionService
-        ├── SystemTextToSpeechService
-        └── AiOrchestrator
+        ├── AiOrchestrator
+        └── SystemTextToSpeechService
 ```
 
-### Rules
+Rules:
 
-* `VoiceController` must **never** inject `WhisperTranscriptionService` directly.
-* `VoiceController` must **never** inject `SystemTextToSpeechService` directly.
-* `VoiceConversationService` coordinates the complete voice pipeline.
-* Voice features reuse the existing `AiOrchestrator`; do not create a separate AI workflow.
-* TTS playback must execute on a background `boundedElastic` scheduler.
-* SSE token streaming must remain independent from TTS playback.
+- VoiceController never injects Whisper directly
+- VoiceController never injects TTS directly
+- VoiceConversationService coordinates the pipeline
+- Voice features reuse AiOrchestrator
+- TTS playback runs on boundedElastic
+- SSE token streaming remains independent from TTS
+
+---
+
+# Frontend Architecture Rules
+
+## 1. Angular 22 Conventions
+
+Always use Angular 22 best practices.
+
+Required:
+
+- Standalone components only
+- Functional interceptors
+- Functional guards
+- `inject()` instead of constructor injection
+- `@if`, `@for`, `@switch`
+- Never use deprecated APIs
+- Check https://v22.angular.dev before introducing new APIs
+
+---
+
+## 2. State Management
+
+Use each tool for its intended purpose.
+
+Angular Signals
+
+- UI state
+- Loading state
+- Selected objects
+- Component state
+
+RxJS
+
+- HTTP
+- SSE
+- Async operations
+- Streaming
+
+Never mix responsibilities.
+
+---
+
+## 3. HTTP Rules
+
+- All API access through Angular HttpClient
+- JWT automatically attached by authInterceptor
+- Never manually attach Authorization header
+- authInterceptor handles 401 redirects
+- Never access localStorage directly
+- Always use StorageService
+
+---
+
+## 4. Component Naming
+
+Use Angular 22 naming.
+
+```text
+login.ts
+chat.ts
+settings.ts
+
+NOT
+
+login.component.ts
+chat.component.ts
+```
+
+---
+
+## 5. Routing Rules
+
+- All feature pages lazy loaded
+- Use `loadComponent`
+- Only `/login` is public
+- All remaining routes protected by authGuard
+
+---
+
+## 6. Styling Rules
+
+Use CSS custom properties for themes.
+
+```css
+var(--bg-primary)
+```
+
+Do not use SCSS variables directly inside components.
+
+Angular Material is limited to:
+
+- Icons
+- Buttons
+- Form fields
+- Dialogs
+
+Everything else should use custom SCSS.
+
+---
+
+## 7. SSE Streaming
+
+Never use EventSource.
+
+Use:
+
+```text
+fetch()
++
+ReadableStream
+```
+
+Reason:
+
+- JWT Authorization header required
+- POST body required
+
+EventSource supports neither.
+
+---
+
+## 8. Models
+
+All TypeScript interfaces belong in:
+
+```text
+src/app/core/models/
+```
+
+Rules:
+
+- Match backend JSON exactly
+- Never create inline interfaces inside components
 
 ---
 
@@ -279,14 +479,43 @@ Every contribution should reinforce:
 
 # What NOT To Change
 
+## Backend
+
 Do **not**:
 
-* Bypass `AiOrchestrator`
-* Change `PromptAssembler` ordering
-* Break dependency direction
-* Move built-in tools outside `tools/builtin`
-* Move MCP components outside `tools/mcp`
-* Inject providers directly into controllers
-* Inject Whisper or TTS directly into `VoiceController`
-* Introduce blocking calls into the reactive pipeline
-* Introduce cloud-only features that violate the local-first philosophy
+- Bypass AiOrchestrator
+- Change PromptAssembler ordering
+- Break dependency direction
+- Inject providers into controllers
+- Move built-in tools outside `tools/builtin`
+- Move MCP outside `tools/mcp`
+- Inject Whisper directly into VoiceController
+- Inject TTS directly into VoiceController
+- Introduce blocking calls into reactive pipelines
+- Introduce cloud-only features that violate local-first philosophy
+
+---
+
+## Frontend
+
+Do **not**:
+
+- Use deprecated Angular APIs
+- Use NgModules
+- Use class-based interceptors
+- Use class-based guards
+- Access localStorage directly
+- Use `*ngIf`
+- Use `*ngFor`
+- Define inline TypeScript interfaces
+- Use EventSource for SSE
+
+Always use:
+
+- Standalone components
+- Functional APIs
+- Angular Signals
+- fetch() + ReadableStream for streaming
+- StorageService
+- CSS variables
+- Angular 22 best practices
