@@ -187,6 +187,31 @@ public class SystemCommands {
                 + "Your AI. Your Data. Your Machine.\n";
     }
 
+    @Command(
+            name = "examples",
+            description = "Show common command usage examples"
+    )
+    public String examples() {
+        return """
+
+                QUICK START:
+                  login                    Sign in to Jarvis
+                  chat                     Start chatting with AI
+                  ask -m "question"        Quick single question
+
+                SESSION MANAGEMENT:
+                  session                  List all conversations
+                  switch-session -n 2      Switch to session #2
+                  new-session              Start fresh session
+
+                SYSTEM:
+                  status                   Check all services
+                  doctor                   Full health diagnostics
+                  jarvis-version           Version information
+                  about                    About Jarvis
+                """;
+    }
+
     private String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0))
