@@ -25,6 +25,7 @@ class SystemCommandsTest {
 
         String result = commands.examples();
 
+        assertThat(result).isNotBlank();
         assertThat(result).contains("QUICK START");
         assertThat(result).contains("SESSION MANAGEMENT");
         assertThat(result).contains("MEMORY");
