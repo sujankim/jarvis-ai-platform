@@ -204,6 +204,12 @@ public class SystemCommands {
                   switch-session -n 2      Switch to session #2
                   new-session              Start fresh session
 
+                MEMORY:
+                  memory list              List all long-term memories
+                  memory add               Add a memory manually
+                  memory delete --number 3 Delete memory by number
+                  memory clear             Clear all memories
+
                 SYSTEM:
                   status                   Check all services
                   doctor                   Full health diagnostics
