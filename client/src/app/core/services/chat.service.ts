@@ -1,16 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { StorageService }
-  from './storage.service';
-import {
-  ChatSession,
-  ChatRequest
-} from '../models/session.model';
+import { StorageService } from './storage.service';
+import { ChatSession, ChatRequest } from '../models/session.model';
 import { Message } from '../models/message.model';
-import {
-  ApiResponse
-} from '../models/api.model';
+import { ApiResponse } from '../models/api.model';
 
 /**
  * Handles all chat and session API calls.
@@ -27,31 +21,21 @@ import {
 })
 export class ChatService {
 
-  private readonly http    = inject(HttpClient);
+  private readonly http = inject(HttpClient);
   private readonly storage = inject(StorageService);
 
   // ── Sessions ──────────────────────────────────
 
   getSessions(): Observable<ApiResponse<ChatSession[]>> {
-    return this.http.get<ApiResponse<ChatSession[]>>(
-      '/api/v1/sessions'
-    );
+    return this.http.get<ApiResponse<ChatSession[]>>('/api/v1/sessions');
   }
 
-  getSessionMessages(
-    sessionId: string
-  ): Observable<ApiResponse<Message[]>> {
-    return this.http.get<ApiResponse<Message[]>>(
-      `/api/v1/sessions/${sessionId}/messages`
-    );
+  getSessionMessages(sessionId: string): Observable<ApiResponse<Message[]>> {
+    return this.http.get<ApiResponse<Message[]>>(`/api/v1/sessions/${sessionId}/messages`);
   }
 
-  archiveSession(
-    sessionId: string
-  ): Observable<void> {
-    return this.http.delete<void>(
-      `/api/v1/sessions/${sessionId}`
-    );
+  archiveSession(sessionId: string): Observable<void> {
+    return this.http.delete<void>(`/api/v1/sessions/${sessionId}`);
   }
 
   // ── SSE Streaming ─────────────────────────────
@@ -74,13 +58,15 @@ export class ChatService {
    * @param onToken   called with each token text
    * @param onDone    called when stream completes
    * @param onError   called on any error
+   * @param signal    optional AbortSignal to cancel the fetch
    */
   streamChat(
     request: ChatRequest,
     onSession: (sessionId: string) => void,
     onToken: (token: string) => void,
     onDone: () => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    signal?: AbortSignal
   ): void {
 
     const token = this.storage.getToken();
@@ -93,17 +79,16 @@ export class ChatService {
     fetch('/api/v1/chat/stream', {
       method: 'POST',
       headers: {
-        'Content-Type':  'application/json',
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-        'Accept':        'text/event-stream'
+        'Accept': 'text/event-stream'
       },
-      body: JSON.stringify(request)
+      body: JSON.stringify(request),
+      signal
     })
       .then(response => {
         if (!response.ok) {
-          throw new Error(
-            `HTTP ${response.status}`
-          );
+          throw new Error(`HTTP ${response.status}`);
         }
         if (!response.body) {
           throw new Error('No response body');
@@ -117,11 +102,11 @@ export class ChatService {
         );
       })
       .catch(err => {
-        onError(
-          err instanceof Error
-            ? err.message
-            : 'Stream failed'
-        );
+        // AbortError is expected when user cancels
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        onError(err instanceof Error ? err.message : 'Stream failed');
       });
   }
 
@@ -134,6 +119,13 @@ export class ChatService {
    *   event: session\ndata: <uuid>\n\n
    *   event: token\ndata: {"t":"text"}\n\n
    *   event: done\ndata: [DONE]\n\n
+   *
+   * `onDone` double-fire guard.
+   * The backend sends event: done\ndata: [DONE]
+   * which calls onDone() via handleEvent().
+   * Then reader.read() returns done: true
+   * which would call onDone() again.
+   * The `finished` flag prevents the second call.
    */
   private async readStream(
     reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -144,50 +136,48 @@ export class ChatService {
   ): Promise<void> {
 
     const decoder = new TextDecoder();
-    let buffer    = '';
+    let buffer = '';
     let eventType = '';
+
+    // Guard against onDone firing twice.
+    let finished = false;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      onDone();
+    };
 
     try {
       while (true) {
-        const { done, value } =
-          await reader.read();
+        const { done, value } = await reader.read();
 
         if (done) {
-          onDone();
+          finish();
           break;
         }
 
-        buffer += decoder.decode(value, {
-          stream: true
-        });
+        buffer += decoder.decode(value, { stream: true });
 
         const lines = buffer.split('\n');
-
-        // Keep last incomplete line in buffer
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
 
-          // Event type line
           if (line.startsWith('event:')) {
-            eventType = line
-              .slice(6)
-              .trim();
+            eventType = line.slice(6).trim();
             continue;
           }
 
-          // Data line
           if (line.startsWith('data:')) {
-            const data = line
-              .slice(5)
-              .trim();
+            const data = line.slice(5).trim();
 
             this.handleEvent(
               eventType,
               data,
               onSession,
               onToken,
-              onDone
+              finish
             );
 
             eventType = '';
@@ -196,11 +186,7 @@ export class ChatService {
         }
       }
     } catch (err) {
-      onError(
-        err instanceof Error
-          ? err.message
-          : 'Stream read error'
-      );
+      onError(err instanceof Error ? err.message : 'Stream read error');
     } finally {
       reader.releaseLock();
     }
@@ -208,16 +194,15 @@ export class ChatService {
 
   /**
    * Route each SSE event to the correct callback.
-   *
-   * token data format from backend: {"t":"text"}
-   * Parses the JSON and extracts the "t" field.
+   * Receives `finish` guard instead of raw `onDone`
+   * to prevent double-firing.
    */
   private handleEvent(
     eventType: string,
     data: string,
     onSession: (sessionId: string) => void,
     onToken: (token: string) => void,
-    onDone: () => void
+    finish: () => void
   ): void {
 
     switch (eventType) {
@@ -238,7 +223,7 @@ export class ChatService {
         break;
 
       case 'done':
-        onDone();
+        finish();
         break;
     }
   }

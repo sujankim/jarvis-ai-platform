@@ -118,9 +118,7 @@
     border-radius: $radius-sm;
     @include flex-center;
     flex-shrink: 0;
-    transition:
-      opacity 0.15s ease,
-      color 0.15s ease;
+    transition: opacity 0.15s ease, color 0.15s ease;
 
     span {
       font-size: 16px;
@@ -246,7 +244,7 @@
     color: var(--text-primary);
     line-height: 1.6;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: break-word;   // was word-break: break-word
   }
 
   // ngx-markdown rendered content
@@ -254,7 +252,7 @@
     font-size: $font-sm;
     color: var(--text-primary);
     line-height: 1.7;
-    word-break: break-word;
+    overflow-wrap: break-word;   // was word-break: break-word
 
     ::ng-deep {
       p { margin-bottom: $space-sm; }
@@ -351,12 +349,8 @@
     background: var(--text-muted);
     animation: bounce 1.2s infinite;
 
-    &:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-    &:nth-child(3) {
-      animation-delay: 0.4s;
-    }
+    &:nth-child(2) { animation-delay: 0.2s; }
+    &:nth-child(3) { animation-delay: 0.4s; }
   }
 }
 
@@ -438,9 +432,7 @@
     color: #ffffff;
     @include flex-center;
     flex-shrink: 0;
-    transition:
-      background 0.15s ease,
-      opacity 0.15s ease;
+    transition: background 0.15s ease, opacity 0.15s ease;
 
     span {
       font-size: 20px;
@@ -453,6 +445,16 @@
     &:disabled {
       opacity: 0.4;
       cursor: not-allowed;
+    }
+
+    // Stop button variant
+    &--stop {
+      background: rgba(239, 68, 68, 0.15);
+      color: $error;
+
+      &:hover {
+        background: rgba(239, 68, 68, 0.25);
+      }
     }
   }
 

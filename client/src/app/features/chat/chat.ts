@@ -1,16 +1,9 @@
-import {
-  Component,
-  inject,
-  signal,
-  computed,
-  OnInit,
-  AfterViewChecked,
-  ViewChild,
-  ElementRef
+import { Component, inject, signal, computed,
+  OnInit, AfterViewChecked, ViewChild, ElementRef
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { MarkdownModule } from 'ngx-markdown';
+import { MarkdownComponent } from 'ngx-markdown';
 import { ChatService }
   from '../../core/services/chat.service';
 import { ChatSession }
@@ -37,7 +30,7 @@ import { Message }
   imports: [
     CommonModule,
     FormsModule,
-    MarkdownModule
+    MarkdownComponent
   ],
   templateUrl: './chat.html',
   styleUrl: './chat.scss'
@@ -45,8 +38,8 @@ import { Message }
 export class Chat implements OnInit, AfterViewChecked {
 
   private readonly chatService = inject(ChatService);
+  private abortController: AbortController | null = null;
 
-  // Reference to message list for auto-scroll
   @ViewChild('messageList')
   messageList!: ElementRef<HTMLDivElement>;
 
@@ -70,7 +63,6 @@ export class Chat implements OnInit, AfterViewChecked {
   readonly errorMessage =
     signal<string | null>(null);
 
-  // Streaming assistant message built token by token
   readonly streamingContent = signal('');
 
   // ── Computed ──────────────────────────────────
@@ -118,7 +110,6 @@ export class Chat implements OnInit, AfterViewChecked {
 
   selectSession(session: ChatSession): void {
     if (this.isStreaming()) return;
-
     this.activeSessionId.set(session.id);
     this.loadMessages(session.id);
     this.errorMessage.set(null);
@@ -126,7 +117,6 @@ export class Chat implements OnInit, AfterViewChecked {
 
   newSession(): void {
     if (this.isStreaming()) return;
-
     this.activeSessionId.set(null);
     this.messages.set([]);
     this.streamingContent.set('');
@@ -147,8 +137,42 @@ export class Chat implements OnInit, AfterViewChecked {
             this.newSession();
           }
           this.loadSessions();
+        },
+        // Fix 4: error handler added
+        // Without this, archive failures are silently
+        // swallowed and the UI shows no feedback.
+        error: () => {
+          this.errorMessage.set(
+            'Failed to archive conversation.'
+          );
         }
       });
+  }
+
+  stopStreaming(): void {
+    this.abortController?.abort();
+    this.abortController = null;
+
+    if (this.streamingContent()) {
+      const assistantMessage: Message = {
+        id:          crypto.randomUUID(),
+        sessionId:   this.activeSessionId() ?? '',
+        role:        'ASSISTANT',
+        content:     this.streamingContent(),
+        modelName:   null,
+        totalTokens: null,
+        durationMs:  null,
+        error:       false,
+        createdAt:   new Date().toISOString()
+      };
+
+      this.messages.update(msgs =>
+        [...msgs, assistantMessage]
+      );
+    }
+
+    this.streamingContent.set('');
+    this.isStreaming.set(false);
   }
 
   // ── Messages ──────────────────────────────────
@@ -180,7 +204,6 @@ export class Chat implements OnInit, AfterViewChecked {
     const text = this.inputText().trim();
     if (!text || this.isStreaming()) return;
 
-    // Add user message to UI immediately
     const userMessage: Message = {
       id:          crypto.randomUUID(),
       sessionId:   this.activeSessionId() ?? '',
@@ -208,25 +231,15 @@ export class Chat implements OnInit, AfterViewChecked {
         sessionId: this.activeSessionId(),
         message:   text
       },
-
-      // onSession
       (sessionId) => {
         this.activeSessionId.set(sessionId);
-        // Reload sessions to show new one in sidebar
         this.loadSessions();
       },
-
-      // onToken
       (token) => {
-        this.streamingContent.update(
-          c => c + token
-        );
+        this.streamingContent.update(c => c + token);
         this.shouldScrollToBottom = true;
       },
-
-      // onDone
       () => {
-        // Commit streaming content as real message
         const assistantMessage: Message = {
           id:          crypto.randomUUID(),
           sessionId:   this.activeSessionId() ?? '',
@@ -247,8 +260,6 @@ export class Chat implements OnInit, AfterViewChecked {
         this.isStreaming.set(false);
         this.shouldScrollToBottom = true;
       },
-
-      // onError
       (error) => {
         this.errorMessage.set(
           'AI response failed. Please try again.'
@@ -263,7 +274,6 @@ export class Chat implements OnInit, AfterViewChecked {
   // ── Input handling ────────────────────────────
 
   onKeyDown(event: KeyboardEvent): void {
-    // Enter sends, Shift+Enter adds new line
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.sendMessage();
@@ -271,7 +281,8 @@ export class Chat implements OnInit, AfterViewChecked {
   }
 
   onInput(event: Event): void {
-    const target = event.target as HTMLTextAreaElement;
+    const target =
+      event.target as HTMLTextAreaElement;
     this.inputText.set(target.value);
     this.autoResizeTextarea(target);
   }
@@ -280,7 +291,8 @@ export class Chat implements OnInit, AfterViewChecked {
     el: HTMLTextAreaElement
   ): void {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    el.style.height =
+      Math.min(el.scrollHeight, 200) + 'px';
   }
 
   // ── Scroll ────────────────────────────────────
