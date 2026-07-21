@@ -1,1 +1,198 @@
-<div>Chat — coming soon</div>
+<div class="chat-layout">
+
+  <!-- Session sidebar -->
+  <aside class="sessions">
+
+    <div class="sessions__header">
+      <h2 class="sessions__title">Conversations</h2>
+      <button
+        class="sessions__new-btn"
+        (click)="newSession()"
+        title="New conversation">
+        <span class="material-symbols-rounded">
+          edit_square
+        </span>
+      </button>
+    </div>
+
+    <div class="sessions__list">
+      @for (
+        session of sessions();
+        track trackBySession($index, session)
+        ) {
+        <div
+          class="session-item"
+          [class.session-item--active]="
+            session.id === activeSessionId()"
+          (click)="selectSession(session)">
+
+          <div class="session-item__info">
+            <span class="session-item__title">
+              {{ formatSessionTitle(session) }}
+            </span>
+            <span class="session-item__count">
+              {{ session.messageCount }} messages
+            </span>
+          </div>
+
+          <button
+            class="session-item__delete"
+            (click)="archiveSession(session, $event)"
+            title="Archive">
+            <span class="material-symbols-rounded">
+              close
+            </span>
+          </button>
+
+        </div>
+      }
+
+      @if (sessions().length === 0) {
+        <div class="sessions__empty">
+          No conversations yet.
+          <br>
+          Start chatting below.
+        </div>
+      }
+    </div>
+
+  </aside>
+
+  <!-- Chat window -->
+  <div class="chat-window">
+
+    <!-- Messages -->
+    <div
+      class="messages"
+      #messageList>
+
+      @if (isLoadingMessages()) {
+        <div class="messages__loading">
+          <span class="spinner"></span>
+          Loading messages...
+        </div>
+      }
+
+      @if (!isLoadingMessages()
+      && messages().length === 0
+      && !isStreaming()) {
+        <div class="messages__empty">
+          <span class="material-symbols-rounded
+                       messages__empty-icon">
+            chat_bubble_outline
+          </span>
+          <p>Start a conversation with Jarvis</p>
+          <span class="messages__empty-hint">
+            Your AI. Your Data. Your Machine.
+          </span>
+        </div>
+      }
+
+      <!-- Message list -->
+      @for (
+        msg of messages();
+        track trackByMessage($index, msg)
+        ) {
+        <div
+          class="message"
+          [class.message--user]="isUserMessage(msg)"
+          [class.message--assistant]="
+            !isUserMessage(msg)"
+          [class.message--error]="msg.error">
+
+          <div class="message__avatar">
+            @if (isUserMessage(msg)) {
+              <span class="material-symbols-rounded">
+                person
+              </span>
+            } @else {
+              <span class="message__avatar-jarvis">
+                J
+              </span>
+            }
+          </div>
+
+          <div class="message__body">
+            @if (isUserMessage(msg)) {
+              <p class="message__text">
+                {{ msg.content }}
+              </p>
+            } @else {
+              <markdown
+                class="message__markdown"
+                [data]="msg.content">
+              </markdown>
+            }
+          </div>
+
+        </div>
+      }
+
+      <!-- Streaming message -->
+      @if (isStreaming()) {
+        <div class="message message--assistant">
+          <div class="message__avatar">
+            <span class="message__avatar-jarvis">J</span>
+          </div>
+          <div class="message__body">
+            @if (streamingContent()) {
+              <markdown
+                class="message__markdown"
+                [data]="streamingContent()">
+              </markdown>
+            } @else {
+              <!-- Typing indicator -->
+              <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+    </div>
+
+    <!-- Error banner -->
+    @if (errorMessage()) {
+      <div class="error-banner">
+        <span class="material-symbols-rounded">
+          error_outline
+        </span>
+        {{ errorMessage() }}
+      </div>
+    }
+
+    <!-- Input area -->
+    <div class="input-area">
+      <div class="input-area__box">
+        <textarea
+          class="input-area__textarea"
+          [value]="inputText()"
+          (input)="onInput($event)"
+          (keydown)="onKeyDown($event)"
+          placeholder="Message Jarvis... (Enter to send)"
+          rows="1"
+          [disabled]="isStreaming()">
+        </textarea>
+
+        <button
+          class="input-area__send"
+          (click)="sendMessage()"
+          [disabled]="!canSend()"
+          title="Send message">
+          <span class="material-symbols-rounded">
+            {{ isStreaming() ? 'stop_circle' : 'send' }}
+          </span>
+        </button>
+      </div>
+
+      <p class="input-area__hint">
+        Enter to send · Shift+Enter for new line
+      </p>
+    </div>
+
+  </div>
+
+</div>

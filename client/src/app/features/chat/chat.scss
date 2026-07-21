@@ -1,0 +1,480 @@
+@use '../../../styles/variables' as *;
+@use '../../../styles/mixins' as *;
+
+// ── Chat layout ───────────────────────────────────
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+
+// ── Session sidebar ───────────────────────────────
+
+.sessions {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--bg-elevated);
+  @include flex-col;
+  overflow: hidden;
+
+  &__header {
+    @include flex-between;
+    padding: $space-md;
+    border-bottom: 1px solid var(--bg-elevated);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: $font-sm;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  &__new-btn {
+    color: var(--text-muted);
+    padding: $space-xs;
+    border-radius: $radius-sm;
+    @include flex-center;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: $accent-primary;
+    }
+
+    span {
+      font-size: 20px;
+    }
+  }
+
+  &__list {
+    flex: 1;
+    overflow-y: auto;
+    padding: $space-sm;
+    @include custom-scrollbar;
+  }
+
+  &__empty {
+    padding: $space-xl $space-md;
+    text-align: center;
+    font-size: $font-sm;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+}
+
+// ── Session item ──────────────────────────────────
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  padding: 10px $space-sm;
+  border-radius: $radius-sm;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--bg-tertiary);
+
+    .session-item__delete {
+      opacity: 1;
+    }
+  }
+
+  &--active {
+    background: $accent-subtle;
+
+    .session-item__title {
+      color: $accent-primary;
+    }
+  }
+
+  &__info {
+    @include flex-col;
+    flex: 1;
+    overflow: hidden;
+    gap: 2px;
+  }
+
+  &__title {
+    font-size: $font-sm;
+    font-weight: 500;
+    color: var(--text-primary);
+    @include truncate;
+  }
+
+  &__count {
+    font-size: $font-xs;
+    color: var(--text-muted);
+  }
+
+  &__delete {
+    opacity: 0;
+    color: var(--text-muted);
+    padding: 2px;
+    border-radius: $radius-sm;
+    @include flex-center;
+    flex-shrink: 0;
+    transition:
+      opacity 0.15s ease,
+      color 0.15s ease;
+
+    span {
+      font-size: 16px;
+    }
+
+    &:hover {
+      color: $error;
+    }
+  }
+}
+
+// ── Chat window ───────────────────────────────────
+
+.chat-window {
+  @include flex-col;
+  height: 100%;
+  overflow: hidden;
+}
+
+// ── Messages ──────────────────────────────────────
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: $space-xl;
+  @include flex-col;
+  gap: $space-lg;
+  @include custom-scrollbar;
+
+  &__loading {
+    @include flex-center;
+    gap: $space-sm;
+    color: var(--text-muted);
+    font-size: $font-sm;
+    padding: $space-xl;
+  }
+
+  &__empty {
+    @include flex-col;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: $space-md;
+    color: var(--text-muted);
+    text-align: center;
+    padding: $space-2xl;
+  }
+
+  &__empty-icon {
+    font-size: 48px;
+    color: var(--bg-elevated);
+  }
+
+  &__empty-hint {
+    font-size: $font-xs;
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+}
+
+// ── Message ───────────────────────────────────────
+
+.message {
+  display: flex;
+  gap: $space-md;
+  max-width: 800px;
+  width: 100%;
+
+  &--user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+
+    .message__avatar {
+      background: $accent-subtle;
+      color: $accent-primary;
+    }
+  }
+
+  &--assistant {
+    align-self: flex-start;
+  }
+
+  &--error {
+    .message__body {
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.05);
+    }
+  }
+
+  &__avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: $radius-full;
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    @include flex-center;
+    flex-shrink: 0;
+    font-size: 18px;
+  }
+
+  &__avatar-jarvis {
+    font-size: $font-sm;
+    font-weight: 700;
+    color: $accent-primary;
+  }
+
+  &__body {
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-elevated);
+    border-radius: $radius-md;
+    padding: $space-sm $space-md;
+    max-width: calc(100% - 48px);
+  }
+
+  &--user &__body {
+    background: $accent-subtle;
+    border-color: rgba(99, 102, 241, 0.2);
+  }
+
+  &__text {
+    font-size: $font-sm;
+    color: var(--text-primary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  // ngx-markdown rendered content
+  &__markdown {
+    font-size: $font-sm;
+    color: var(--text-primary);
+    line-height: 1.7;
+    word-break: break-word;
+
+    ::ng-deep {
+      p { margin-bottom: $space-sm; }
+      p:last-child { margin-bottom: 0; }
+
+      h1, h2, h3, h4 {
+        font-weight: 600;
+        margin: $space-md 0 $space-sm;
+        color: var(--text-primary);
+      }
+
+      code {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--bg-elevated);
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-family: $font-mono;
+        font-size: 0.85em;
+      }
+
+      pre {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--bg-elevated);
+        border-radius: $radius-sm;
+        padding: $space-md;
+        overflow-x: auto;
+        margin: $space-sm 0;
+
+        code {
+          background: none;
+          border: none;
+          padding: 0;
+          font-size: $font-xs;
+        }
+      }
+
+      ul, ol {
+        padding-left: $space-lg;
+        margin-bottom: $space-sm;
+
+        li { margin-bottom: 4px; }
+      }
+
+      ul { list-style: disc; }
+      ol { list-style: decimal; }
+
+      blockquote {
+        border-left: 3px solid $accent-primary;
+        padding-left: $space-md;
+        color: var(--text-secondary);
+        margin: $space-sm 0;
+      }
+
+      strong { font-weight: 600; }
+      em { font-style: italic; }
+
+      a {
+        color: $accent-primary;
+        text-decoration: underline;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: $space-sm 0;
+
+        th, td {
+          border: 1px solid var(--bg-elevated);
+          padding: $space-xs $space-sm;
+          text-align: left;
+        }
+
+        th {
+          background: var(--bg-tertiary);
+          font-weight: 600;
+        }
+      }
+    }
+  }
+}
+
+// ── Typing indicator ──────────────────────────────
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: $space-xs 0;
+  align-items: center;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    animation: bounce 1.2s infinite;
+
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+  }
+}
+
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+}
+
+// ── Error banner ──────────────────────────────────
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  padding: $space-sm $space-lg;
+  background: rgba(239, 68, 68, 0.1);
+  color: $error;
+  font-size: $font-sm;
+  flex-shrink: 0;
+
+  span {
+    font-size: 18px;
+  }
+}
+
+// ── Input area ────────────────────────────────────
+
+.input-area {
+  padding: $space-md $space-xl $space-lg;
+  flex-shrink: 0;
+  @include flex-col;
+  gap: $space-xs;
+
+  &__box {
+    display: flex;
+    align-items: flex-end;
+    gap: $space-sm;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-elevated);
+    border-radius: $radius-md;
+    padding: $space-sm;
+    transition: border-color 0.2s ease;
+
+    &:focus-within {
+      border-color: $accent-primary;
+    }
+  }
+
+  &__textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    color: var(--text-primary);
+    font-size: $font-sm;
+    line-height: 1.6;
+    min-height: 24px;
+    max-height: 200px;
+    padding: 4px $space-xs;
+    font-family: $font-family;
+
+    &::placeholder {
+      color: var(--text-muted);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__send {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: $radius-sm;
+    background: $accent-primary;
+    color: #ffffff;
+    @include flex-center;
+    flex-shrink: 0;
+    transition:
+      background 0.15s ease,
+      opacity 0.15s ease;
+
+    span {
+      font-size: 20px;
+    }
+
+    &:hover:not(:disabled) {
+      background: $accent-hover;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &__hint {
+    font-size: $font-xs;
+    color: var(--text-muted);
+    text-align: center;
+  }
+}
+
+// ── Spinner ───────────────────────────────────────
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

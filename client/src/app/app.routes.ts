@@ -1,18 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 
-/**
- * Application routes.
- *
- * All routes except /login are protected by authGuard.
- * All feature routes use lazy loading.
- *
- * Lazy loading: each page loads only when navigated to.
- * Faster initial bundle. Each feature is independent.
- *
- * Reference:
- * https://angular.dev/guide/routing/common-router-tasks
- */
 export const routes: Routes = [
 
   // Public — no shell
