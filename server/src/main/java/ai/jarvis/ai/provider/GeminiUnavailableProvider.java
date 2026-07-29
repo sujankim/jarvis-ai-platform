@@ -2,6 +2,7 @@ package ai.jarvis.ai.provider;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -17,13 +18,19 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @Component("gemini")
-@ConditionalOnMissingBean(GeminiProvider.class)
-public class GeminiUnavailableProvider implements AiProvider {
+@ConditionalOnExpression(
+        "!T(org.springframework.util.StringUtils)"
+                + ".hasText('${spring.ai.google.genai"
+                + ".api-key:}')"
+)
+public class GeminiUnavailableProvider
+        implements AiProvider {
 
     public GeminiUnavailableProvider() {
         log.info(
                 "Gemini not configured. "
-                        + "Set GEMINI_API_KEY in .env to enable.");
+                        + "Set GEMINI_API_KEY in .env "
+                        + "to enable cloud fallback.");
     }
 
     @Override
