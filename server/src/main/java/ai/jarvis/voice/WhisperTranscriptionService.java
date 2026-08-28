@@ -16,26 +16,24 @@ import java.time.Duration;
 
 /**
  * Transcribes audio to text using Whisper.
- *
+ * <p>
  * Ollama does NOT support Whisper natively.
  * Use one of two modes:
- *
+ * <p>
  * MODE 1 — Groq API (cloud, free tier):
- *   Set GROQ_API_KEY in .env
- *   Free: 6000 requests/day
- *   URL: api.groq.com/openai/v1
- *
+ * Set GROQ_API_KEY in .env
+ * Free: 6000 requests/day
+ * URL: api.groq.com/openai/v1
+ * <p>
  * MODE 2 — Local whisper.cpp server:
- *   No API key required
- *   URL: http://localhost:8178
- *   Setup: github.com/ggerganov/whisper.cpp
- *
- *
+ * No API key required
+ * URL: http://localhost:8178
+ * Setup: github.com/ggerganov/whisper.cpp
+ * <p>
  * 1. Added timeouts: 30s transcription, 5s health check
  * 2. Local mode works without API key
- *    isLocalMode=true when URL contains localhost
  * 3. Separate code paths for local vs cloud
- *    No incompatible WebClient type casting
+ * No incompatible WebClient type casting
  */
 @Slf4j
 @Service
@@ -162,7 +160,7 @@ public class WhisperTranscriptionService {
 
     /**
      * Check if Whisper is configured and reachable.
-     *
+     * <p>
      * Separate code paths for local vs cloud.
      * No type casting between incompatible WebClient
      * spec types (RequestHeadersSpec vs RequestBodySpec).
@@ -216,6 +214,41 @@ public class WhisperTranscriptionService {
         return isGroq ? "groq-cloud" : "remote-whisper";
     }
 
+
+    /**
+     * Builds the multipart body for a Whisper transcription request.
+     *
+     * @param audioBytes raw audio bytes
+     * @param language   optional language hint
+     * @return multipart request body
+     */
+    MultipartBodyBuilder buildMultipartBody(
+            byte[] audioBytes,
+            String language) {
+
+        MultipartBodyBuilder bodyBuilder =
+                new MultipartBodyBuilder();
+
+        bodyBuilder.part(
+                "file",
+                new ByteArrayResource(audioBytes) {
+                    @Override
+                    public String getFilename() {
+                        return "audio.wav";
+                    }
+                });
+
+        bodyBuilder.part("model", model);
+        bodyBuilder.part("response_format", "text");
+
+        if (language != null && !language.isBlank()) {
+            bodyBuilder.part("language", language);
+        }
+
+        return bodyBuilder;
+    }
+
+
     // ── Private Helpers ───────────────────────────
 
     /**
@@ -234,10 +267,10 @@ public class WhisperTranscriptionService {
     /**
      * Call Whisper via OpenAI-compatible multipart API.
      * Works with Groq API and whisper.cpp server.
-     *
+     * <p>
      * Separate code paths for local vs cloud.
      * Added TRANSCRIPTION_TIMEOUT before .block()
-     *      to prevent thread starvation.
+     * to prevent thread starvation.
      *
      * @param audioBytes raw audio bytes
      * @param language   optional language hint (nullable)
@@ -248,23 +281,7 @@ public class WhisperTranscriptionService {
             String language) {
 
         MultipartBodyBuilder bodyBuilder =
-                new MultipartBodyBuilder();
-
-        bodyBuilder.part("file",
-                new ByteArrayResource(audioBytes) {
-                    @Override
-                    public String getFilename() {
-                        return "audio.wav";
-                    }
-                });
-
-        bodyBuilder.part("model", model);
-        bodyBuilder.part("response_format", "text");
-
-        if (language != null
-                && !language.isBlank()) {
-            bodyBuilder.part("language", language);
-        }
+                buildMultipartBody(audioBytes, language);
 
         // FIX: Separate paths — no incompatible casting
         // Local whisper.cpp: no auth header
@@ -310,4 +327,6 @@ public class WhisperTranscriptionService {
 
         return response.trim();
     }
+
+
 }
