@@ -105,6 +105,25 @@ public class CliHttpClient {
                 .body(Map.class);
     }
 
+    // ── DELETE ───────────────────────────────────────
+
+    public void deleteWithAuth(
+            String uri,
+            String token) {
+        restClient
+                .delete()
+                .uri(uri)
+                .header("Authorization",
+                        "Bearer " + token)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, (request, response) -> {
+                        throw new RuntimeException(
+                                "Delete failed: HTTP "
+                                + response.getStatusCode().value());
+                })
+                .toBodilessEntity();
+    }
+    
     // ── Health check ─────────────────────────────
 
     public boolean isServerReachable() {

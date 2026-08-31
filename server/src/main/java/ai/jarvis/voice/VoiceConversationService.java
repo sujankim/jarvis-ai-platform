@@ -104,10 +104,9 @@ public class VoiceConversationService {
                     // Both the SSE pipeline and the TTS pipeline
                     // subscribe to the SAME upstream — one Ollama call,
                     // same tokens delivered to both consumers.
-                    Flux<String> tokenStream =
-                            orchestrator.chat(request)
-                                    .share();
-
+                    Flux<String> tokenStream = orchestrator.chat(request)
+                            .publish()
+                            .autoConnect(2);
                     // TTS runs in background on boundedElastic.
                     // Subscribes to the shared tokenStream —
                     // does NOT trigger a new AI call.
