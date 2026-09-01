@@ -35,6 +35,12 @@ export class AuthService {
   private readonly router  = inject(Router);
   private readonly storage = inject(StorageService);
 
+  constructor() {
+    // Validate token on every app start
+    // Clears expired tokens before any route guard runs
+    this.validateStoredToken();
+  }
+
   // ── Signals ───────────────────────────────────
 
   // Initialize from localStorage so page refresh
@@ -117,5 +123,34 @@ export class AuthService {
     this.storage.clearAll();
     this._currentUser.set(null);
     this.router.navigate(['/login']);
+  }
+
+  /**
+   * Check if stored JWT is still valid.
+   * Called on app bootstrap to clear expired tokens.
+   * Without this, a user with an expired token
+   * appears logged in until their first API call fails.
+   */
+  private validateStoredToken(): void {
+    const token = this.storage.getToken();
+    if (!token) return;
+
+    try {
+      // JWT payload is base64 encoded — decode it
+      const payload = JSON.parse(
+        atob(token.split('.')[1])
+      );
+      const expiry = payload.exp * 1000;
+
+      if (Date.now() >= expiry) {
+        // Token expired — clear everything
+        this.storage.clearAll();
+        this._currentUser.set(null);
+      }
+    } catch {
+      // Malformed token — clear it
+      this.storage.clearAll();
+      this._currentUser.set(null);
+    }
   }
 }
