@@ -86,6 +86,7 @@ It is a **modular AI orchestration platform** that runs entirely on your own mac
 | Memory REST API | ✅ | v0.2.0 |
 | CLI memory commands | ✅ | v0.2.0 |
 | Document upload + processing | ✅ | v0.3.0 |
+| PDF text extraction + page tracking | ✅ | v0.3.0 |
 | Document chunking + embedding | ✅ | v0.3.0 |
 | RAG semantic search | ✅ | v0.3.0 |
 | RAG context injection into prompt | ✅ | v0.3.0 |

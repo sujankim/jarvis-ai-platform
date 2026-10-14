@@ -6,7 +6,9 @@ import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
+import reactor.core.scheduler.Schedulers;
+import ai.jarvis.rag.extraction.PdfTextExtractor;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -64,6 +66,7 @@ public class DocumentProcessingService {
     private final DocumentChunkRepository chunkRepository;
     private final R2dbcEntityTemplate r2dbcEntityTemplate;
     private final List<TextExtractor> extractors;
+    private final TransactionalOperator transactionalOperator;
 
     /**
      * Constructor injection.
@@ -74,11 +77,13 @@ public class DocumentProcessingService {
             DocumentRepository documentRepository,
             DocumentChunkRepository chunkRepository,
             R2dbcEntityTemplate r2dbcEntityTemplate,
-            List<TextExtractor> extractors) {
+            List<TextExtractor> extractors,
+            TransactionalOperator transactionalOperator) {
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
         this.r2dbcEntityTemplate = r2dbcEntityTemplate;
         this.extractors = extractors;
+        this.transactionalOperator = transactionalOperator;
 
         log.info(
                 "DocumentProcessingService initialized "
@@ -112,36 +117,41 @@ public class DocumentProcessingService {
             String rawText,
             DocumentFileType fileType) {
 
+        if (fileType == DocumentFileType.PDF) {
+            return Mono.error(new IllegalArgumentException(
+                    "PDF files must be processed using processPdfDocument()"));
+        }
+
         log.info(
-                "Processing document: id={} type={} "
-                        + "chars={}",
+                "Processing document: id={} type={} chars={}",
                 documentId,
                 fileType,
-                rawText != null
-                        ? rawText.length() : 0);
+                rawText != null ? rawText.length() : 0);
 
         return documentRepository
                 .findByIdAndUserId(documentId, userId)
                 .switchIfEmpty(Mono.error(
                         new RuntimeException(
-                                "Document not found: "
-                                        + documentId)))
+                                "Document not found: " + documentId)))
+
                 // Step 1: Mark as PROCESSING
                 .flatMap(doc ->
                         r2dbcEntityTemplate
-                                .update(doc.withProcessing())
-                )
+                                .update(doc.withProcessing()))
+
                 // Step 2 & 3: Extract + chunk
                 .flatMap(doc -> {
                     try {
                         String cleanText =
                                 extractText(rawText, fileType);
+
                         List<String> chunks =
                                 splitIntoChunks(cleanText);
 
                         log.info(
                                 "Split into {} chunks: id={}",
-                                chunks.size(), documentId);
+                                chunks.size(),
+                                documentId);
 
                         // Step 4: Save all chunks
                         return saveChunks(
@@ -149,48 +159,130 @@ public class DocumentProcessingService {
                                 userId,
                                 chunks,
                                 fileType)
-                                .thenReturn(
-                                        new ChunkResult(
-                                                doc, chunks.size()));
+                                .then(
+                                        r2dbcEntityTemplate
+                                                .update(
+                                                        doc.withReady(
+                                                                chunks.size())))
+                                .map(updatedDoc ->
+                                        updatedDoc);
 
                     } catch (Exception e) {
                         log.error(
-                                "Extraction failed: "
-                                        + "id={} error={}",
+                                "Extraction failed: id={} error={}",
                                 documentId,
                                 e.getMessage());
+
                         return Mono.error(e);
                     }
                 })
-                // Step 5: Mark as READY
-                .flatMap(result ->
-                        r2dbcEntityTemplate
-                                .update(result.document()
-                                        .withReady(
-                                                result.chunkCount()))
-                                .doOnSuccess(d ->
-                                        log.info(
-                                                "Document READY: "
-                                                        + "id={} chunks={}",
-                                                documentId,
-                                                result.chunkCount()))
-                )
+
                 // On any error: mark as FAILED
                 .onErrorResume(error -> {
                     log.error(
-                            "Document processing FAILED: "
-                                    + "id={} error={}",
+                            "Document processing FAILED: id={} error={}",
                             documentId,
                             error.getMessage());
 
                     return documentRepository
                             .findByIdAndUserId(
-                                    documentId, userId)
+                                    documentId,
+                                    userId)
                             .flatMap(doc ->
                                     r2dbcEntityTemplate
-                                            .update(doc.withFailed(
-                                                    error.getMessage()))
-                            );
+                                            .update(
+                                                    doc.withFailed(
+                                                            error.getMessage())));
+                });
+    }
+    public Mono<Document> processPdfDocument(
+            UUID documentId,
+            UUID userId,
+            byte[] pdfContent) {
+
+        log.info(
+                "Processing PDF document: id={} bytes={}",
+                documentId,
+                pdfContent != null ? pdfContent.length : 0);
+
+        return documentRepository
+                .findByIdAndUserId(documentId, userId)
+                .switchIfEmpty(Mono.error(
+                        new RuntimeException(
+                                "Document not found: " + documentId)))
+
+                // Step 1: Mark as PROCESSING
+                .flatMap(doc ->
+                        r2dbcEntityTemplate
+                                .update(doc.withProcessing()))
+
+                // Step 2: Extract PDF text and create chunks
+                .flatMap(doc -> {
+                    try {
+                        TextExtractor extractor = extractors.stream()
+                                .filter(e -> e.supports(DocumentFileType.PDF))
+                                .findFirst()
+                                .orElseThrow(() ->
+                                        new IllegalStateException(
+                                                "PDF extractor not configured"));
+
+                        if (!(extractor instanceof PdfTextExtractor pdfExtractor)) {
+                            throw new IllegalStateException(
+                                    "PDF extractor does not support page tracking");
+                        }
+
+                        return Mono.fromCallable(() -> {
+                                    List<PdfTextExtractor.PdfParagraph> paragraphs =
+                                            pdfExtractor.extractWithPages(
+                                                    pdfContent);
+
+                                    return splitPdfIntoChunks(
+                                            paragraphs);
+                                })
+                                .subscribeOn(
+                                        Schedulers.boundedElastic())
+
+                                // Step 3: Save chunks + mark READY
+                                .flatMap(chunks ->
+                                        savePdfChunks(
+                                                documentId,
+                                                userId,
+                                                chunks)
+                                                .then(
+                                                        r2dbcEntityTemplate
+                                                                .update(
+                                                                        doc.withReady(
+                                                                                chunks.size())))
+                                                .as(
+                                                        transactionalOperator
+                                                                ::transactional));
+
+                    } catch (Exception e) {
+                        log.error(
+                                "PDF extraction failed: id={} error={}",
+                                documentId,
+                                e.getMessage());
+
+                        return Mono.error(e);
+                    }
+                })
+
+                // On any error: mark as FAILED
+                .onErrorResume(error -> {
+                    log.error(
+                            "PDF processing FAILED: id={} error={}",
+                            documentId,
+                            error.getMessage());
+
+                    return documentRepository
+                            .findByIdAndUserId(
+                                    documentId,
+                                    userId)
+                            .flatMap(doc ->
+                                    r2dbcEntityTemplate
+                                            .update(
+                                                    doc.withFailed(
+                                                            error.getMessage())));
                 });
     }
 
@@ -342,6 +434,116 @@ public class DocumentProcessingService {
                 })
                 .then();
     }
+
+     List<PdfChunk> splitPdfIntoChunks(
+            List<PdfTextExtractor.PdfParagraph> paragraphs) {
+
+        if (paragraphs == null || paragraphs.isEmpty()) {
+            return List.of();
+        }
+
+        List<PdfChunk> chunks = new ArrayList<>();
+
+        int wordsPerChunk =
+                (int) (CHUNK_SIZE_TOKENS * 0.75);
+        int overlapWords =
+                (int) (CHUNK_OVERLAP_TOKENS * 0.75);
+
+        List<String> words = new ArrayList<>();
+        List<Integer> pageNumbers = new ArrayList<>();
+
+        for (PdfTextExtractor.PdfParagraph paragraph : paragraphs) {
+            String[] paragraphWords =
+                    paragraph.text().split("\\s+");
+
+            for (String word : paragraphWords) {
+                words.add(word);
+                pageNumbers.add(paragraph.pageNumber());
+            }
+        }
+
+        int start = 0;
+
+        while (start < words.size()) {
+            int end = Math.min(
+                    start + wordsPerChunk,
+                    words.size());
+
+            int startPage = pageNumbers.get(start);
+
+            for (int i = start + 1; i < end; i++) {
+                if (pageNumbers.get(i) != startPage) {
+                    end = i;
+                    break;
+                }
+            }
+
+            StringBuilder chunkText = new StringBuilder();
+
+            for (int i = start; i < end; i++) {
+                if (i > start) {
+                    chunkText.append(" ");
+                }
+                chunkText.append(words.get(i));
+            }
+
+            String content = chunkText.toString().trim();
+
+            if (!content.isEmpty()) {
+                chunks.add(new PdfChunk(
+                        content,
+                        pageNumbers.get(start)));
+            }
+
+            if (end < words.size()) {
+                if (end < start + wordsPerChunk) {
+                    // A page boundary ended this chunk.
+                    // Start from the next word so no content is skipped.
+                    start = end;
+                } else {
+                    // Normal chunk boundary: keep the configured overlap.
+                    start = end - overlapWords;
+                }
+            } else {
+                break;
+            }
+        }
+
+        return chunks;
+    }
+
+    private Mono<Void> savePdfChunks(
+            UUID documentId,
+            UUID userId,
+            List<PdfChunk> chunks) {
+
+        return Flux.range(0, chunks.size())
+                .concatMap(index -> {
+                    PdfChunk pdfChunk = chunks.get(index);
+
+                    int tokens =
+                            estimateTokens(pdfChunk.content());
+
+                    DocumentChunk chunk =
+                            DocumentChunk.create(
+                                    documentId,
+                                    userId,
+                                    pdfChunk.content(),
+                                    index,
+                                    pdfChunk.pageNumber(),
+                                    tokens
+                            );
+
+                    return r2dbcEntityTemplate
+                            .insert(chunk)
+                            .then();
+                })
+                .then();
+    }
+
+     record PdfChunk(
+            String content,
+            int pageNumber) {}
 
     // ── Private Records ───────────────────────────
 
