@@ -220,6 +220,22 @@
     }
   }
 
+  &__theme-toggle {
+    color: var(--text-secondary);
+    padding: $space-xs;
+    border-radius: $radius-sm;
+    @include flex-center;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: var(--accent-primary);
+    }
+
+    span {
+      font-size: 22px;
+    }
+  }
+
   &__right {
     display: flex;
     align-items: center;

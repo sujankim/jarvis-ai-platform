@@ -4,7 +4,6 @@
   <!-- Sidebar -->
   <aside class="sidebar">
 
-    <!-- Logo -->
     <div class="sidebar__brand">
       <div class="sidebar__logo">J</div>
       @if (!sidebarCollapsed()) {
@@ -12,20 +11,18 @@
       }
     </div>
 
-    <!-- Navigation -->
     <nav class="sidebar__nav">
       @for (item of navItems; track item.path) {
         <a
           class="nav-item"
           [routerLink]="item.path"
           routerLinkActive="nav-item--active"
-          [title]="sidebarCollapsed() ? item.label : ''">
-
-          <!-- Material icon -->
-          <span class="material-symbols-rounded nav-item__icon">
+          [title]="sidebarCollapsed()
+            ? item.label : ''">
+          <span class="material-symbols-rounded
+                       nav-item__icon">
             {{ item.icon }}
           </span>
-
           @if (!sidebarCollapsed()) {
             <span class="nav-item__label">
               {{ item.label }}
@@ -35,7 +32,6 @@
       }
     </nav>
 
-    <!-- Sidebar footer — user info + logout -->
     <div class="sidebar__footer">
       <div class="user-info">
         <div class="user-info__avatar">
@@ -69,28 +65,43 @@
 
   </aside>
 
-  <!-- Main content area -->
+  <!-- Main content -->
   <div class="main">
 
-    <!-- Top bar -->
     <header class="topbar">
       <button
         class="topbar__toggle"
         (click)="toggleSidebar()"
         title="Toggle sidebar">
         <span class="material-symbols-rounded">
-          {{ sidebarCollapsed() ? 'menu' : 'menu_open' }}
+          {{ sidebarCollapsed()
+          ? 'menu' : 'menu_open' }}
         </span>
       </button>
 
       <div class="topbar__right">
+
+        <!-- Theme toggle -->
+        <button
+          class="topbar__theme-toggle"
+          (click)="theme.toggle()"
+          [title]="theme.isDark()
+            ? 'Switch to light theme'
+            : 'Switch to dark theme'">
+          <span class="material-symbols-rounded">
+            {{ theme.isDark()
+            ? 'light_mode'
+            : 'dark_mode' }}
+          </span>
+        </button>
+
         <span class="topbar__username">
           {{ username() }}
         </span>
+
       </div>
     </header>
 
-    <!-- Page content -->
     <main class="content">
       <router-outlet />
     </main>
