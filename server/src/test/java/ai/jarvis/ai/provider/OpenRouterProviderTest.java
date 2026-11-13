@@ -2,13 +2,24 @@ package ai.jarvis.ai.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import ai.jarvis.tools.ToolRegistry;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import reactor.test.StepVerifier;
 
@@ -17,6 +28,31 @@ class OpenRouterProviderTest {
 
     private static final String BASE_URL =
             OpenRouterProvider.DEFAULT_BASE_URL;
+
+
+    private static final String SSE_RESPONSE =
+            chunk("{\"role\":\"assistant\",\"content\":\"Hello\"}", "null")
+                    + chunk("{\"content\":\" world\"}", "null")
+                    + chunk("{}", "\"stop\"")
+                    + "data: [DONE]\n\n";
+
+    private static String chunk(
+            String delta, String finishReason) {
+        return "data: {\"id\":\"chatcmpl-test\","
+                + "\"object\":\"chat.completion.chunk\","
+                + "\"created\":1,"
+                + "\"model\":\"vendor/some-model\","
+                + "\"choices\":[{\"index\":0,\"delta\":" + delta
+                + ",\"finish_reason\":" + finishReason + "}]}\n\n";
+    }
+
+
+    public static class PingTool {
+        @Tool(description = "Replies with pong")
+        public String ping() {
+            return "pong";
+        }
+    }
 
     private ToolRegistry toolRegistry;
 
@@ -103,6 +139,114 @@ class OpenRouterProviderTest {
                     .expectErrorMessage(
                             "OpenRouter API key not configured.")
                     .verify();
+        }
+    }
+
+
+    @Nested
+    @DisplayName("streamChat against a local OpenAI-compatible endpoint")
+    class StreamChat {
+
+        private static final String MODEL = "vendor/some-model";
+
+        private HttpServer server;
+        private final AtomicReference<String> requestPath =
+                new AtomicReference<>();
+        private final AtomicReference<String> authorization =
+                new AtomicReference<>();
+        private final AtomicReference<String> requestBody =
+                new AtomicReference<>();
+
+        @BeforeEach
+        void startServer() throws IOException {
+            server = HttpServer.create(
+                    new InetSocketAddress(
+                            InetAddress.getByName("127.0.0.1"), 0),
+                    0);
+            server.createContext("/", exchange -> {
+                requestPath.set(
+                        exchange.getRequestURI().getPath());
+                authorization.set(
+                        exchange.getRequestHeaders()
+                                .getFirst("Authorization"));
+                requestBody.set(new String(
+                        exchange.getRequestBody().readAllBytes(),
+                        StandardCharsets.UTF_8));
+
+                byte[] response =
+                        SSE_RESPONSE.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders()
+                        .add("Content-Type", "text/event-stream");
+                exchange.sendResponseHeaders(200, response.length);
+                try (var out = exchange.getResponseBody()) {
+                    out.write(response);
+                }
+            });
+            server.start();
+        }
+
+        @AfterEach
+        void stopServer() {
+            server.stop(0);
+        }
+
+        private String baseUrl() {
+            return "http://127.0.0.1:"
+                    + server.getAddress().getPort()
+                    + "/api/v1";
+        }
+
+        private String chat() {
+            OpenRouterProvider provider = new OpenRouterProvider(
+                    "sk-or-test", baseUrl(), MODEL, toolRegistry);
+
+            List<String> tokens = provider
+                    .streamChat(new Prompt("hi"))
+                    .collectList()
+                    .block(Duration.ofSeconds(15));
+
+            return String.join("", tokens);
+        }
+
+        @Test
+        @DisplayName("streams tokens from <baseUrl>/chat/completions with the key and model")
+        void streamsTokens() {
+            when(toolRegistry.hasTools()).thenReturn(false);
+
+            assertThat(chat()).isEqualTo("Hello world");
+
+            assertThat(requestPath.get())
+                    .isEqualTo("/api/v1/chat/completions");
+            assertThat(authorization.get())
+                    .isEqualTo("Bearer sk-or-test");
+            assertThat(requestBody.get())
+                    .containsPattern(
+                            "\"model\"\\s*:\\s*\"vendor/some-model\"");
+        }
+
+        @Test
+        @DisplayName("omits tool definitions when the registry has no tools")
+        void omitsToolsWhenNone() {
+            when(toolRegistry.hasTools()).thenReturn(false);
+
+            chat();
+
+            assertThat(requestBody.get())
+                    .doesNotContain("\"tools\"");
+        }
+
+        @Test
+        @DisplayName("sends tool definitions when the registry has tools")
+        void sendsToolsWhenPresent() {
+            when(toolRegistry.hasTools()).thenReturn(true);
+            when(toolRegistry.asArray())
+                    .thenReturn(new Object[] {new PingTool()});
+
+            chat();
+
+            assertThat(requestBody.get())
+                    .containsPattern("\"tools\"\\s*:")
+                    .containsPattern("\"name\"\\s*:\\s*\"ping\"");
         }
     }
 
