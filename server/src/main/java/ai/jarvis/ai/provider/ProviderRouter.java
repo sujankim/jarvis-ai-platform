@@ -1,6 +1,7 @@
 package ai.jarvis.ai.provider;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -11,7 +12,9 @@ import reactor.core.publisher.Mono;
  * ROUTING LOGIC:
  * 1. Check Ollama availability (local, primary)
  * 2. If Ollama down → fallback to Gemini
- * 3. If both down → error with helpful message
+ * 3. If Gemini unavailable → fallback to OpenRouter
+ *    (only when OPENROUTER_API_KEY is set)
+ * 4. If all down → error with helpful message
  *
  * FIX (CI Job #81959644503):
  * Added @Qualifier("gemini") to constructor parameter.
@@ -22,6 +25,12 @@ import reactor.core.publisher.Mono;
  * now named "gemini" via @Component("gemini").
  * Only ONE will be created (conditional beans).
  * @Qualifier tells Spring exactly which name to inject.
+ *
+ * OPENROUTER:
+ * There is no "unavailable" placeholder bean for
+ * OpenRouter. OpenRouterProvider simply does not exist
+ * without an API key, so it is injected through an
+ * ObjectProvider and the field is null when absent.
  */
 @Slf4j
 @Component
@@ -29,6 +38,9 @@ public class ProviderRouter {
 
     private final OllamaProvider ollamaProvider;
     private final AiProvider geminiProvider;
+
+    // null when OPENROUTER_API_KEY is not set
+    private final AiProvider openRouterProvider;
 
     /**
      * FIX: @Qualifier("gemini") added.
@@ -45,19 +57,33 @@ public class ProviderRouter {
      * → GeminiProvider IS created
      * → GeminiUnavailableProvider NOT created
      * → @Qualifier("gemini") injects GeminiProvider ✅
+     *
+     * OpenRouter is optional: the ObjectProvider resolves
+     * to null when the "openrouter" bean does not exist.
      */
     public ProviderRouter(
             OllamaProvider ollamaProvider,
-            @Qualifier("gemini")            // ← ADD this
-            AiProvider geminiProvider) {
+            @Qualifier("gemini")
+            AiProvider geminiProvider,
+            @Qualifier("openrouter")
+            ObjectProvider<AiProvider> openRouterProvider) {
         this.ollamaProvider = ollamaProvider;
         this.geminiProvider = geminiProvider;
+        this.openRouterProvider =
+                openRouterProvider.getIfAvailable();
         log.info(
                 "ProviderRouter initialized: "
-                        + "primary=ollama fallback={}",
+                        + "primary=ollama fallback={} "
+                        + "fallback2={}",
                 geminiProvider.getName()
                         + "("
                         + geminiProvider.getModelName()
+                        + ")",
+                this.openRouterProvider == null
+                        ? "none"
+                        : this.openRouterProvider.getName()
+                        + "("
+                        + this.openRouterProvider.getModelName()
                         + ")");
     }
 
@@ -86,15 +112,12 @@ public class ProviderRouter {
                                     return Mono.just(
                                             geminiProvider);
                                 }
-                                log.error(
-                                        "All providers "
-                                                + "unavailable");
-                                return Mono.error(
-                                        new RuntimeException(
-                                                "No AI provider "
-                                                        + "available.\n"
-                                                        + "Fix: ollama serve"
-                                        ));
+
+                                log.warn(
+                                        "Gemini unavailable. "
+                                                + "Checking OpenRouter...");
+
+                                return routeToOpenRouter();
                             });
                 });
     }
@@ -105,9 +128,56 @@ public class ProviderRouter {
                     Mono.just((AiProvider) ollamaProvider);
             case "gemini" ->
                     Mono.just(geminiProvider);
+            case "openrouter" ->
+                    openRouterOrError();
             default -> Mono.error(
                     new RuntimeException(
                             "Unknown provider: " + name));
         };
+    }
+
+    /**
+     * Last step of the fallback chain.
+     * Fails with the usual "no provider" error when
+     * OpenRouter is not configured or not available.
+     */
+    private Mono<AiProvider> routeToOpenRouter() {
+        if (openRouterProvider == null) {
+            return noProviderAvailable();
+        }
+
+        return openRouterProvider
+                .isAvailable()
+                .flatMap(openRouterUp -> {
+                    if (openRouterUp) {
+                        log.info(
+                                "Routing to: "
+                                        + "openrouter [FALLBACK]");
+                        return Mono.just(openRouterProvider);
+                    }
+                    return noProviderAvailable();
+                });
+    }
+
+    private Mono<AiProvider> openRouterOrError() {
+        if (openRouterProvider == null) {
+            return Mono.error(
+                    new RuntimeException(
+                            "OpenRouter is not configured.\n"
+                                    + "Fix: set OPENROUTER_API_KEY"));
+        }
+        return Mono.just(openRouterProvider);
+    }
+
+    private Mono<AiProvider> noProviderAvailable() {
+        log.error(
+                "All providers "
+                        + "unavailable");
+        return Mono.error(
+                new RuntimeException(
+                        "No AI provider "
+                                + "available.\n"
+                                + "Fix: ollama serve"
+                ));
     }
 }
